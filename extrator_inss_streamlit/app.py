@@ -47,7 +47,8 @@ if uploaded_file:
         df = pd.DataFrame(linhas, columns=[
             "Data", "RMC (217)", "RCC (268)", "SINDICATO", "Bruto (101)", "Descontos", "Líquido"
         ])
-        st.dataframe(df.style.format("R$ {:,.2f}"))
+        st.dataframe(Df.style.format({col: "R$ {:,.2f}" for col in Df.columns[1:]}), use_container_width=True)
+
 
         st.subheader("Totais e Cálculo Final")
         col1, col2, col3 = st.columns(3)
