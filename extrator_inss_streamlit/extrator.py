@@ -13,41 +13,39 @@ rubricas_textuais = {
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia_linha(linha):
-    match = re.search(r'(\d{2})/(\d{4})', linha)
-    if match:
-        return f"01/{match.group(1)}/{match.group(2)}"
-    return None
-
 def processar_pdf(caminho_pdf):
     dados = defaultdict(lambda: {"RMC": 0.0, "RCC": 0.0, "SINDICATO": 0.0})
 
     with pdfplumber.open(caminho_pdf) as pdf:
+        texto_total = ""
         for pagina in pdf.pages:
             texto = pagina.extract_text()
-            if not texto:
-                continue
-            linhas = texto.split("\n")
-            competencia_atual = None
+            if texto:
+                texto_total += texto + "\n"
 
-            for linha in linhas:
-                nova_data = extrair_competencia_linha(linha)
-                if nova_data:
-                    competencia_atual = nova_data
+    # Dividir por blocos com base no padrão de competência (ex: 01/2021)
+    blocos = re.split(r"(?=\d{2}/\d{4})", texto_total)
 
-                if competencia_atual:
-                    for chave, codigo in rubricas_alvo.items():
-                        if codigo in linha:
-                            valor = re.search(r'R\$ ([\d.,]+)', linha)
-                            if valor:
-                                dados[competencia_atual][chave] += formatar_valor(valor.group(1))
+    for bloco in blocos:
+        match_data = re.search(r"(\d{2})/(\d{4})", bloco)
+        if not match_data:
+            continue
+        competencia = f"01/{match_data.group(1)}/{match_data.group(2)}"
 
-                    for chave, palavras in rubricas_textuais.items():
-                        if any(p in linha.upper() for p in palavras):
-                            valor = re.search(r'R\$ ([\d.,]+)', linha)
-                            if valor:
-                                dados[competencia_atual][chave] += formatar_valor(valor.group(1))
+        for chave, codigo in rubricas_alvo.items():
+            padrao = re.compile(rf"{codigo}.*?R\$ ([\d.,]+)")
+            valores = padrao.findall(bloco)
+            for v in valores:
+                dados[competencia][chave] += formatar_valor(v)
 
+        for chave, palavras in rubricas_textuais.items():
+            padrao = re.compile(rf"({'|'.join(palavras)})[\s\w-]*R\$ ([\d.,]+)", re.IGNORECASE)
+            valores = padrao.findall(bloco)
+            for _, v in valores:
+                dados[competencia][chave] += formatar_valor(v)
+
+    # Ordenar corretamente: ano, mês
     dados_ordenados = dict(sorted(dados.items(), key=lambda x: (int(x[0][6:]), int(x[0][3:5]))))
     return dados_ordenados
+
 
