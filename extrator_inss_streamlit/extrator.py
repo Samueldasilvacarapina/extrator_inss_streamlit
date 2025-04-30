@@ -18,9 +18,9 @@ def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
 def extrair_competencia_linha(linha):
-    match = re.search(r'Per[ií]odo.*?(\d{2})/(\d{4})', linha)
+    match = re.search(r'(\d{2})/(\d{2})/(\d{4})', linha)
     if match:
-        return f"01/{match.group(1)}/{match.group(2)}"
+        return f"01/{match.group(2)}/{match.group(3)}"
     return None
 
 def processar_pdf(caminho_pdf, debug=False):
