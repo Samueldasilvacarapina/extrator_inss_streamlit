@@ -18,9 +18,9 @@ def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
 def extrair_competencia_linha(linha):
-    match = re.search(r'(\d{2})/(\d{2})/(\d{4})', linha)
+    match = re.search(r'(\d{2})/(\d{4})', linha)
     if match:
-        return f"01/{match.group(2)}/{match.group(3)}"
+        return f"01/{match.group(1)}/{match.group(2)}"
     return None
 
 def processar_pdf(caminho_pdf, debug=False):
@@ -44,7 +44,7 @@ def processar_pdf(caminho_pdf, debug=False):
 
                 for chave, codigo in rubricas_alvo.items():
                     if codigo in linha:
-                        valor = re.search(r'R\$\s*([\d\.\,]+)', linha)
+                        valor = re.search(r'R\$\s*([\d.,]+)', linha)
                         if valor:
                             dados.append({
                                 "Data": competencia_atual,
@@ -54,7 +54,7 @@ def processar_pdf(caminho_pdf, debug=False):
 
                 for chave, palavras in rubricas_textuais.items():
                     if any(p in linha.upper() for p in palavras):
-                        valor = re.search(r'R\$\s*([\d\.\,]+)', linha)
+                        valor = re.search(r'R\$\s*([\d.,]+)', linha)
                         if valor:
                             dados.append({
                                 "Data": competencia_atual,
