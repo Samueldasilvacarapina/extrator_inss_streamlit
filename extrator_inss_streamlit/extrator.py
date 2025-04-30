@@ -1,6 +1,7 @@
 import pdfplumber
 import re
 from collections import defaultdict
+from datetime import datetime
 
 rubricas_alvo = {
     "RMC": "217",
@@ -16,41 +17,50 @@ rubricas_textuais = {
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
+def extrair_competencia_linha(linha):
+    match = re.search(r'(\d{2})/(\d{4})', linha)
+    if match:
+        return f"01/{match.group(1)}/{match.group(2)}"
+    return None
+
 def processar_pdf(caminho_pdf, debug=False):
-    dados = defaultdict(lambda: {"RMC": 0.0, "RCC": 0.0, "SINDICATO": 0.0})
+    dados = []
 
     with pdfplumber.open(caminho_pdf) as pdf:
-        texto_total = ""
         for pagina in pdf.pages:
             texto = pagina.extract_text()
-            if texto:
-                texto_total += texto + "\n"
+            if not texto:
+                continue
+            linhas = texto.split("\n")
+            competencia_atual = None
 
-    blocos = re.split(r"(?=\d{2}/\d{4})", texto_total)
+            for linha in linhas:
+                nova_data = extrair_competencia_linha(linha)
+                if nova_data:
+                    competencia_atual = nova_data
 
-    for bloco in blocos:
-        match_data = re.search(r"(\d{2})/(\d{4})", bloco)
-        if not match_data:
-            continue
-        competencia = f"01/{match_data.group(1)}/{match_data.group(2)}"
+                if not competencia_atual:
+                    continue
 
-        if debug:
-            print(f"📅 {competencia}\n---\n{bloco}\n---\n")
+                for chave, codigo in rubricas_alvo.items():
+                    if codigo in linha:
+                        valor = re.search(r'R\$\s*([\d.,]+)', linha)
+                        if valor:
+                            dados.append({
+                                "Data": competencia_atual,
+                                "Tipo": chave,
+                                "Valor": formatar_valor(valor.group(1))
+                            })
 
-        # RMC e RCC (numéricos)
-        for chave, codigo in rubricas_alvo.items():
-            padrao = re.compile(rf"{codigo}[\s\S]*?R\$\s*([\d.,]+)", re.IGNORECASE)
-            valores = padrao.findall(bloco)
-            for v in valores:
-                dados[competencia][chave] += formatar_valor(v)
+                for chave, palavras in rubricas_textuais.items():
+                    if any(p in linha.upper() for p in palavras):
+                        valor = re.search(r'R\$\s*([\d.,]+)', linha)
+                        if valor:
+                            dados.append({
+                                "Data": competencia_atual,
+                                "Tipo": chave,
+                                "Valor": formatar_valor(valor.group(1))
+                            })
 
-        # SINDICATO e variações (palavras)
-        for chave, palavras in rubricas_textuais.items():
-            for palavra in palavras:
-                padrao = re.compile(rf"{palavra}[\s\S]*?R\$\s*([\d.,]+)", re.IGNORECASE)
-                valores = padrao.findall(bloco)
-                for v in valores:
-                    dados[competencia][chave] += formatar_valor(v)
-
-    dados_ordenados = dict(sorted(dados.items(), key=lambda x: (int(x[0][6:]), int(x[0][3:5]))))
-    return dados_ordenados
+    dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+    return dados
