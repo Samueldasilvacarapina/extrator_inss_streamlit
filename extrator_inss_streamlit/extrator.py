@@ -28,10 +28,10 @@ def processar_pdf(caminho_pdf):
             linhas = texto.split("\n")
             competencia_atual = None
 
-            for linha in linhas:
-                comp_match = re.search(r'Competência.*?(\d{2})/(\d{4})', linha)
-                if comp_match:
-                    competencia_atual = f"01/{comp_match.group(1)}/{comp_match.group(2)}"
+            nova_data = extrair_competencia_linha(linha)
+if nova_data:
+    competencia_atual = nova_data
+
 
                 if competencia_atual:
                     for chave, codigo in rubricas_alvo.items():
