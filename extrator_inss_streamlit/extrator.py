@@ -25,13 +25,15 @@ def processar_pdf(caminho_pdf):
     with pdfplumber.open(caminho_pdf) as pdf:
         for pagina in pdf.pages:
             texto = pagina.extract_text()
+            if not texto:
+                continue
             linhas = texto.split("\n")
             competencia_atual = None
 
-            nova_data = extrair_competencia_linha(linha)
-if nova_data:
-    competencia_atual = nova_data
-
+            for linha in linhas:
+                nova_data = extrair_competencia_linha(linha)
+                if nova_data:
+                    competencia_atual = nova_data
 
                 if competencia_atual:
                     for chave, codigo in rubricas_alvo.items():
@@ -48,3 +50,4 @@ if nova_data:
 
     dados_ordenados = dict(sorted(dados.items(), key=lambda x: (int(x[0][6:]), int(x[0][3:5]))))
     return dados_ordenados
+
