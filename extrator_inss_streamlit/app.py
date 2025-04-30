@@ -7,7 +7,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
-st.markdown("Envie o PDF e gere uma planilha limpa com RMC (217), RCC (268), SINDICATO. Ordenado por mês e ano corretamente.")
+st.markdown("Envie o PDF e veja os valores reais por competência, mês a mês.")
 
 uploaded_file = st.file_uploader("Envie o arquivo PDF do histórico de créditos", type="pdf")
 
@@ -25,63 +25,35 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Valor"] = df["Valor"].astype(float)
         df = df.sort_values("Data")
-
-        # 🧩 PIVOTAR: transformar 'Tipo' em colunas
-        tabela = df.pivot_table(index="Data", columns="Tipo", values="Valor", aggfunc="sum").fillna(0)
-        tabela = tabela.reset_index()
-
-        # Renomear colunas para manter padrão
-        tabela = tabela.rename(columns={
-            "RMC": "RMC (217)",
-            "RCC": "RCC (268)",
-            "SINDICATO": "SINDICATO"
-        })
-
-        # Mostrar a tabela formatada
-        for col in ["RMC (217)", "RCC (268)", "SINDICATO"]:
-            if col not in tabela.columns:
-                tabela[col] = 0.0
-
-        tabela = tabela[["Data", "RMC (217)", "RCC (268)", "SINDICATO"]]
-
-        # Formatar valores com R$
-        tabela_formatada = tabela.copy()
-        for col in ["RMC (217)", "RCC (268)", "SINDICATO"]:
-            tabela_formatada[col] = tabela_formatada[col].map(lambda x: f"R$ {x:,.2f}")
+        df["Valor"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")  # ✅ FORMATAÇÃO SEM .style
 
         st.success("Dados extraídos com sucesso!")
-        st.dataframe(tabela_formatada, use_container_width=True)
+        st.dataframe(df, use_container_width=True)  # ✅ SEM USAR .style
 
-        # 🧮 Totais
+        # Calcular totais com base no DataFrame original (sem formatação)
+        df_raw = pd.DataFrame(dados)
+        totais = df_raw.groupby("Tipo")["Valor"].sum()
         st.subheader("Totais por Tipo")
-        col1, col2, col3 = st.columns(3)
-        total_rmc = tabela["RMC (217)"].sum()
-        total_rcc = tabela["RCC (268)"].sum()
-        total_sind = tabela["SINDICATO"].sum()
+        for tipo, total in totais.items():
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric(f"Total {tipo}", f"R$ {total:,.2f}")
+            with col2:
+                st.metric("Em Dobro", f"R$ {total * 2:,.2f}")
 
-        with col1:
-            st.metric("Total RMC", f"R$ {total_rmc:,.2f}")
-            st.metric("Em Dobro", f"R$ {total_rmc * 2:,.2f}")
-            st.metric("Valor da Causa", f"R$ {total_rmc * 2 + 10000:,.2f}")
-        with col2:
-            st.metric("Total RCC", f"R$ {total_rcc:,.2f}")
-            st.metric("Em Dobro", f"R$ {total_rcc * 2:,.2f}")
-            st.metric("Valor da Causa", f"R$ {total_rcc * 2 + 10000:,.2f}")
-        with col3:
-            st.metric("Total SINDICATO", f"R$ {total_sind:,.2f}")
-            st.metric("Em Dobro", f"R$ {total_sind * 2:,.2f}")
-            st.metric("Valor da Causa", f"R$ {total_sind * 2 + 10000:,.2f}")
+        valor_total = totais.sum()
+        st.divider()
+        st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
-        # Excel para download
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            tabela.to_excel(writer, index=False, sheet_name="Créditos INSS")
-
+            df_raw.to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
             "📥 Baixar Planilha Excel",
             data=output.getvalue(),
-            file_name="planilha_creditos_inss.xlsx",
+            file_name="planilha_detalhada_inss.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
         os.remove(caminho)
+
