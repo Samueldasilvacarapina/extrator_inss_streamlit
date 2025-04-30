@@ -13,8 +13,8 @@ rubricas_textuais = {
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia(texto):
-    match = re.search(r'Competência.*?(\d{2})/(\d{4})', texto)
+def extrair_competencia_linha(linha):
+    match = re.search(r'(\d{2})/(\d{4})', linha)
     if match:
         return f"01/{match.group(1)}/{match.group(2)}"
     return None
