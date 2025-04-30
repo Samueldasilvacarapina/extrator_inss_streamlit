@@ -42,34 +42,31 @@ def processar_pdf(caminho_pdf, debug=False):
                 if not competencia_atual:
                     continue
 
+                linha_upper = linha.upper()
+
                 # RMC e RCC por código (217, 268)
                 for chave, codigo in rubricas_alvo.items():
                     if codigo in linha:
                         valor = re.search(r'R\$\s*([\d.,]+)', linha)
                         if valor:
-                            # Tenta extrair nome do banco
-                            banco = ""
-                            nome_match = re.search(rf'{codigo}.*?- (.*?)\s+R\$', linha)
-                            if nome_match:
-                                banco = nome_match.group(1).strip()
+                            entidade_match = re.search(rf'{codigo}[^\d\n\r]*? -?\s*([^R$\n\r]+)', linha)
+                            entidade = entidade_match.group(1).strip() if entidade_match else ""
                             dados.append({
                                 "Data": competencia_atual,
-                                "Tipo": f"{chave} - {banco}" if banco else chave,
+                                "Tipo": f"{chave} - {entidade}" if entidade else chave,
                                 "Valor": formatar_valor(valor.group(1))
                             })
 
-                # Sindicato por palavras-chave
+                # SINDICATO (CONTRIBUIÇÕES)
                 for chave, palavras in rubricas_textuais.items():
-                    if any(p in linha.upper() for p in palavras):
+                    if any(p in linha_upper for p in palavras):
                         valor = re.search(r'R\$\s*([\d.,]+)', linha)
                         if valor:
-                            sindicato = ""
-                            nome_match = re.search(r'(SIND.*?)(R\$|$)', linha.upper())
-                            if nome_match:
-                                sindicato = nome_match.group(1).strip()
+                            entidade_match = re.search(r'(CONTRIB\.?\s*[^R$\n]*)', linha_upper)
+                            entidade = entidade_match.group(1).strip() if entidade_match else ""
                             dados.append({
                                 "Data": competencia_atual,
-                                "Tipo": f"{chave} - {sindicato}" if sindicato else chave,
+                                "Tipo": f"{chave} - {entidade}" if entidade else chave,
                                 "Valor": formatar_valor(valor.group(1))
                             })
 
