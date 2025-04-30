@@ -24,34 +24,36 @@ if uploaded_file:
     else:
         df = pd.DataFrame(dados)
         df["Valor"] = df["Valor"].astype(float)
-        df = df.sort_values("Data")
-        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df_display = df[["Data", "Tipo", "Valor Formatado"]].rename(columns={"Valor Formatado": "Valor"})
+        df = df.sort_values(by=["Data"], key=lambda col: pd.to_datetime(col, format="%d/%m/%Y"))
+        df["Valor"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
 
         st.success("Dados extraídos com sucesso!")
-        st.dataframe(df_display, use_container_width=True)
+        st.dataframe(df, use_container_width=True)
 
-        # Calcular totais com base no DataFrame original (sem formatação)
-        totais = df.groupby("Tipo")["Valor"].sum()
+        # Totais
+        df_raw = pd.DataFrame(dados)
+        df_raw["Valor"] = df_raw["Valor"].astype(float)
+        totais = df_raw.groupby("Tipo")["Valor"].sum()
 
         st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric(f"Total {tipo}", f"R$ {total:,.2f}")
             with col2:
                 st.metric("Em Dobro", f"R$ {total * 2:,.2f}")
+            with col3:
+                st.metric("Com Indenização", f"R$ {total * 2 + 10000:,.2f}")
 
         valor_total = totais.sum()
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
-        # Baixar Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Detalhado")
+            df_raw.to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
-            "📥 Baixar Planilha Excel",
+            "📅 Baixar Planilha Excel",
             data=output.getvalue(),
             file_name="planilha_detalhada_inss.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
