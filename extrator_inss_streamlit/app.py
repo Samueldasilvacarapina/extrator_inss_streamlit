@@ -7,7 +7,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
-st.markdown("Envie o PDF e gere uma planilha limpa com RMC (217), RCC (268), SINDICATO (rubricas com 'CONTRIB').")
+st.markdown("Envie o PDF e gere uma planilha limpa com RMC (217), RCC (268), SINDICATO. Ordenado por mês e ano corretamente.")
 
 uploaded_file = st.file_uploader("Envie o arquivo PDF do histórico de créditos", type="pdf")
 
@@ -26,11 +26,10 @@ if uploaded_file:
         linhas = []
         total_rmc = total_rcc = total_sind = 0.0
 
-        for data in sorted(dados):
-            linha = dados[data]
-            rmc = linha['RMC']
-            rcc = linha['RCC']
-            sind = linha['SINDICATO']
+        for data, valores in dados.items():
+            rmc = valores["RMC"]
+            rcc = valores["RCC"]
+            sind = valores["SINDICATO"]
             total_rmc += rmc
             total_rcc += rcc
             total_sind += sind
@@ -52,7 +51,7 @@ if uploaded_file:
             st.metric("Em Dobro", f"R$ {total_sind * 2:,.2f}")
 
         st.divider()
-        st.metric("VALOR DA CAUSA (RMC + RCC + SIND x2 + Indenização R$10.000)", f"R$ {(total_rmc + total_rcc + total_sind)*2 + 10000:,.2f}")
+        st.metric("VALOR DA CAUSA (x2 + R$10.000)", f"R$ {(total_rmc + total_rcc + total_sind)*2 + 10000:,.2f}")
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
