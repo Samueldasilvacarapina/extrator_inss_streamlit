@@ -7,7 +7,7 @@ from io import BytesIO
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
-st.markdown("Envie o PDF e veja os valores reais por competência sem agrupamento.")
+st.markdown("Envie o PDF e veja os valores reais por competência, mês a mês.")
 
 uploaded_file = st.file_uploader("Envie o arquivo PDF do histórico de créditos", type="pdf")
 
@@ -25,10 +25,14 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Valor"] = df["Valor"].astype(float)
         df = df.sort_values("Data")
-        st.success("Dados extraídos com sucesso!")
-        st.dataframe(df.style.format({"Valor": "R$ {:,.2f}"}), use_container_width=True)
+        df["Valor"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")  # ✅ FORMATAÇÃO SEM .style
 
-        totais = df.groupby("Tipo")["Valor"].sum()
+        st.success("Dados extraídos com sucesso!")
+        st.dataframe(df, use_container_width=True)  # ✅ SEM USAR .style
+
+        # Calcular totais com base no DataFrame original (sem formatação)
+        df_raw = pd.DataFrame(dados)
+        totais = df_raw.groupby("Tipo")["Valor"].sum()
         st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
             col1, col2 = st.columns(2)
@@ -43,7 +47,7 @@ if uploaded_file:
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Detalhado")
+            df_raw.to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
             "📥 Baixar Planilha Excel",
             data=output.getvalue(),
