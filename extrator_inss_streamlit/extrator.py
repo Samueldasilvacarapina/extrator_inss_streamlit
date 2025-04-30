@@ -1,43 +1,50 @@
 import pdfplumber
 import re
+from collections import defaultdict
 
-rubrica_rmc = '217'
-rubrica_rcc = '268'
-rubricas_sindicato = ['SINDICATO', 'CONTRIB']
+rubricas_alvo = {
+    "RMC": "217",
+    "RCC": "268",
+}
+rubricas_textuais = {
+    "SINDICATO": ["CONTRIB", "SINDICATO"]
+}
 
 def formatar_valor(valor_str):
-    return float(valor_str.replace('.', '').replace(',', '.'))
+    return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia(bloco):
-    match = re.search(r'(\d{2})/(\d{4})', bloco)
-    return f"01/{match.group(1)}/{match.group(2)}" if match else None
-
-def somar_rubrica(bloco, rubrica):
-    padrao = re.compile(rf'{rubrica} .*?R\$ ([\d.,]+)')
-    return sum(formatar_valor(v) for v in padrao.findall(bloco))
-
-def somar_texto(bloco, palavras_chave):
-    padrao = re.compile(rf"({'|'.join(palavras_chave)}).*?R\$ ([\d.,]+)", re.IGNORECASE)
-    return sum(formatar_valor(m[1]) for m in padrao.findall(bloco))
+def extrair_competencia(texto):
+    match = re.search(r'Competência.*?(\d{2})/(\d{4})', texto)
+    if match:
+        return f"01/{match.group(1)}/{match.group(2)}"
+    return None
 
 def processar_pdf(caminho_pdf):
-    dados = {}
+    dados = defaultdict(lambda: {"RMC": 0.0, "RCC": 0.0, "SINDICATO": 0.0})
 
     with pdfplumber.open(caminho_pdf) as pdf:
         for pagina in pdf.pages:
             texto = pagina.extract_text()
-            blocos = re.split(r'(?=Competência Período)', texto)
+            linhas = texto.split("\n")
+            competencia_atual = None
 
-            for bloco in blocos:
-                data = extrair_competencia(bloco)
-                if not data:
-                    continue
-                if data not in dados:
-                    dados[data] = {'RMC': 0.0, 'RCC': 0.0, 'SINDICATO': 0.0}
+            for linha in linhas:
+                comp_match = re.search(r'Competência.*?(\d{2})/(\d{4})', linha)
+                if comp_match:
+                    competencia_atual = f"01/{comp_match.group(1)}/{comp_match.group(2)}"
 
-                dados[data]['RMC'] += somar_rubrica(bloco, rubrica_rmc)
-                dados[data]['RCC'] += somar_rubrica(bloco, rubrica_rcc)
-                dados[data]['SINDICATO'] += somar_texto(bloco, rubricas_sindicato)
+                if competencia_atual:
+                    for chave, codigo in rubricas_alvo.items():
+                        if codigo in linha:
+                            valor = re.search(r'R\$ ([\d.,]+)', linha)
+                            if valor:
+                                dados[competencia_atual][chave] += formatar_valor(valor.group(1))
 
-    # ordenar da mais antiga pra mais recente
-    return dict(sorted(dados.items(), key=lambda x: tuple(map(int, x[0].split("/")[::-1]))))
+                    for chave, palavras in rubricas_textuais.items():
+                        if any(p in linha.upper() for p in palavras):
+                            valor = re.search(r'R\$ ([\d.,]+)', linha)
+                            if valor:
+                                dados[competencia_atual][chave] += formatar_valor(valor.group(1))
+
+    dados_ordenados = dict(sorted(dados.items(), key=lambda x: (int(x[0][6:]), int(x[0][3:5]))))
+    return dados_ordenados
