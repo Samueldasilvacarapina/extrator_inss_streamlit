@@ -25,14 +25,15 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Valor"] = df["Valor"].astype(float)
         df = df.sort_values("Data")
-        df["Valor"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")  # ✅ FORMATAÇÃO SEM .style
+        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
+        df_display = df[["Data", "Tipo", "Valor Formatado"]].rename(columns={"Valor Formatado": "Valor"})
 
         st.success("Dados extraídos com sucesso!")
-        st.dataframe(df, use_container_width=True)  # ✅ SEM USAR .style
+        st.dataframe(df_display, use_container_width=True)
 
         # Calcular totais com base no DataFrame original (sem formatação)
-        df_raw = pd.DataFrame(dados)
-        totais = df_raw.groupby("Tipo")["Valor"].sum()
+        totais = df.groupby("Tipo")["Valor"].sum()
+
         st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
             col1, col2 = st.columns(2)
@@ -45,9 +46,10 @@ if uploaded_file:
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
+        # Baixar Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df_raw.to_excel(writer, index=False, sheet_name="Detalhado")
+            df.to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
             "📥 Baixar Planilha Excel",
             data=output.getvalue(),
@@ -56,4 +58,3 @@ if uploaded_file:
         )
 
         os.remove(caminho)
-
