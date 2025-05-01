@@ -1,72 +1,40 @@
 import pdfplumber
-import re
 from datetime import datetime
-from pdf2image import convert_from_path
-import pytesseract
-
-rubricas_alvo = {
-    "RMC": "217",
-    "RCC": "268",
-}
-
-rubricas_textuais = {
-    "SINDICATO": [
-        "CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"
-    ]
-}
-
-def formatar_valor(valor_str):
-    return float(valor_str.replace(".", "").replace(",", "."))
-
-def extrair_competencia_periodo(linha):
-    match = re.search(r'(\d{2})/(\d{2})/(\d{4})\s*a\s*(\d{2})/(\d{2})/(\d{4})', linha)
-    if match:
-        return f"01/{match.group(2)}/{match.group(3)}"
-    return None
-
-def extrair_nome_banco(linha):
-    match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
-    return match.group(2).strip() if match else "BANCO"
-
-def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
-    return match.group(1).strip() if match else "SINDICATO"
+import re
 
 def extrair_dados_linhas(linhas):
-    dados = []
-    competencia_atual = None
+    dados_extraidos = []
+    padrao_data = r"\b\d{2}/\d{2}/\d{4}\b"
+    padrao_valor = r"R?\$?\s?[\d\.,]+"
 
     for linha in linhas:
-        nova_data = extrair_competencia_periodo(linha)
-        if nova_data:
-            competencia_atual = nova_data
+        if any(rubrica in linha for rubrica in ["217", "268", "SIND"]):
+            data_match = re.search(padrao_data, linha)
+            valor_match = re.findall(padrao_valor, linha)
 
-        if not competencia_atual:
-            continue
+            if data_match and valor_match:
+                data = data_match.group()
+                valor = valor_match[-1]
+                valor = float(valor.replace("R$", "").replace(".", "").replace(",", ".").strip())
 
-        for chave, codigo in rubricas_alvo.items():
-            if codigo in linha:
-                valor = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor:
-                    dados.append({
-                        "Data": competencia_atual,
-                        "Tipo": f"{chave} - {extrair_nome_banco(linha)}",
-                        "Valor": formatar_valor(valor.group(1))
-                    })
+                if "217" in linha:
+                    tipo = "RMC"
+                elif "268" in linha:
+                    tipo = "RCC"
+                elif "SIND" in linha:
+                    tipo = "SINDICAL"
+                else:
+                    tipo = "DESCONHECIDO"
 
-        for chave, palavras in rubricas_textuais.items():
-            if any(p in linha.upper() for p in palavras):
-                valor = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor:
-                    dados.append({
-                        "Data": competencia_atual,
-                        "Tipo": f"{chave} - {extrair_nome_sindicato(linha)}",
-                        "Valor": formatar_valor(valor.group(1))
-                    })
+                dados_extraidos.append({
+                    "Data": data,
+                    "Valor": valor,
+                    "Tipo": tipo
+                })
 
-    return dados
+    return dados_extraidos
 
-def processar_pdf(caminho_pdf, debug=False):
+def processar_pdf(caminho_pdf):
     dados = []
 
     try:
@@ -77,15 +45,15 @@ def processar_pdf(caminho_pdf, debug=False):
                     continue
                 linhas = texto.split("\n")
                 dados.extend(extrair_dados_linhas(linhas))
-    except:
-        pass
+    except Exception as e:
+        import streamlit as st
+        st.error("Erro ao ler o PDF. Verifique se o arquivo está corrompido ou é uma imagem.")
+        return []
 
     if not dados:
-        imagens = convert_from_path(caminho_pdf)
-        for imagem in imagens:
-            texto = pytesseract.image_to_string(imagem, lang='por')
-            linhas = texto.split("\n")
-            dados.extend(extrair_dados_linhas(linhas))
+        import streamlit as st
+        st.warning("O conteúdo do PDF parece estar em formato de imagem (escaneado). Use um PDF com texto real para extração correta.")
+        return []
 
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
     return dados
