@@ -1,5 +1,6 @@
 import pdfplumber
 import re
+from collections import defaultdict
 from datetime import datetime
 
 rubricas_alvo = {
@@ -17,20 +18,24 @@ def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
 def extrair_competencia_periodo(linha):
-    # Captura datas como "26/05/2020 a 31/05/2020", mesmo sem a palavra "PERÍODO"
-    match = re.search(r'(\d{2})/(\d{2})/(\d{4})\s*a\s*(\d{2})/(\d{2})/(\d{4})', linha)
+    match = re.search(r'(\d{2})/(\d{2})/(\d{4})\s*(?:a|-|–|até)?\s*(\d{2})/(\d{2})/(\d{4})', linha)
     if match:
-        return f"01/{match.group(2)}/{match.group(3)}"
+        dia, mes, ano = match.group(1), match.group(2), match.group(3)
+        try:
+            data = datetime.strptime(f"{dia}/{mes}/{ano}", "%d/%m/%Y")
+            return f"01/{mes}/{ano}"
+        except ValueError:
+            return None
     return None
 
 def extrair_nome_banco(linha):
-    match = re.search(r'RMC.*?- ([A-Z0-9 \-\.]+)', linha)
+    match = re.search(r'RMC.*?- ([A-Z ]+)', linha)
     if not match:
-        match = re.search(r'RCC.*?- ([A-Z0-9 \-\.]+)', linha)
+        match = re.search(r'RCC.*?- ([A-Z ]+)', linha)
     return match.group(1).strip() if match else "BANCO"
 
 def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB[^R\$]*)', linha, re.IGNORECASE)
+    match = re.search(r'(CONTRIB\.?.*?)\s*R\$?', linha, re.IGNORECASE)
     return match.group(1).strip() if match else "SINDICATO"
 
 def processar_pdf(caminho_pdf, debug=False):
@@ -46,6 +51,9 @@ def processar_pdf(caminho_pdf, debug=False):
             linhas = texto.split("\n")
 
             for linha in linhas:
+                if debug:
+                    print(linha)
+
                 nova_data = extrair_competencia_periodo(linha)
                 if nova_data:
                     competencia_atual = nova_data
@@ -75,5 +83,3 @@ def processar_pdf(caminho_pdf, debug=False):
 
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
     return dados
-
-
