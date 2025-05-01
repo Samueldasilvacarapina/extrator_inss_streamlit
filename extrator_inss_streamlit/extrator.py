@@ -17,6 +17,7 @@ def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
 def extrair_competencia_periodo(linha):
+    # Captura datas como "26/05/2020 a 31/05/2020", mesmo sem a palavra "PERÍODO"
     match = re.search(r'(\d{2})/(\d{2})/(\d{4})\s*a\s*(\d{2})/(\d{2})/(\d{4})', linha)
     if match:
         return f"01/{match.group(2)}/{match.group(3)}"
