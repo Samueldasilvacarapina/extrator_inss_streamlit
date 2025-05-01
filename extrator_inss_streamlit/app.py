@@ -4,6 +4,7 @@ from extrator import processar_pdf
 import tempfile
 import os
 from io import BytesIO
+from datetime import datetime
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
@@ -17,18 +18,21 @@ if uploaded_file:
         caminho = tmp_file.name
 
     with st.spinner("Processando PDF..."):
-        dados = processar_pdf(caminho, debug=False)  # Ative debug=True para ver linhas no terminal
+        dados = processar_pdf(caminho, debug=False)
 
     if not dados:
         st.error("Não foi possível extrair dados do PDF.")
     else:
         df = pd.DataFrame(dados)
-        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
+        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y")
         df = df.sort_values("Data")
+        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
+        df = df.drop(columns=["Valor"])  # Remove a coluna bruta
 
         st.success("Dados extraídos com sucesso!")
         st.dataframe(df, use_container_width=True)
 
+        # Cálculos
         df_raw = pd.DataFrame(dados)
         totais = df_raw.groupby("Tipo")["Valor"].sum()
 
@@ -48,7 +52,7 @@ if uploaded_file:
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df_raw.to_excel(writer, index=False, sheet_name="Detalhado")
+            df[["Data", "Tipo", "Valor Formatado"]].to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
             "📥 Baixar Planilha Excel",
             data=output.getvalue(),
@@ -57,6 +61,7 @@ if uploaded_file:
         )
 
         os.remove(caminho)
+
 
 
 
