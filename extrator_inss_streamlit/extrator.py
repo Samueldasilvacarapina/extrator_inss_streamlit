@@ -80,7 +80,6 @@ def processar_pdf(caminho_pdf, debug=False):
     except:
         pass
 
-    # Se ainda estiver vazio, tenta OCR
     if not dados:
         imagens = convert_from_path(caminho_pdf)
         for imagem in imagens:
