@@ -4,10 +4,11 @@ from extrator import processar_pdf
 import tempfile
 import os
 from io import BytesIO
+from datetime import datetime
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
-st.markdown("Envie o PDF e gere uma planilha limpa com RMC (217), RCC (268), SINDICATO (rubricas com 'CONTRIB').")
+st.markdown("Envie o PDF e veja os valores reais por competência, mês a mês.")
 
 uploaded_file = st.file_uploader("Envie o arquivo PDF do histórico de créditos", type="pdf")
 
@@ -22,49 +23,45 @@ if uploaded_file:
     if not dados:
         st.error("Não foi possível extrair dados do PDF.")
     else:
+        # Ordenar os dados corretamente por data
+        dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+
+        df = pd.DataFrame(dados)
+        df["Valor"] = df["Valor"].astype(float)
+        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
+
         st.success("Dados extraídos com sucesso!")
-        linhas = []
-        total_rmc = total_rcc = total_sind = 0.0
+        st.dataframe(df[["Data", "Tipo", "Valor Formatado"]], use_container_width=True)
 
-        for data in sorted(dados):
-            linha = dados[data]
-            rmc = linha['RMC']
-            rcc = linha['RCC']
-            sind = linha['SINDICATO']
-            total_rmc += rmc
-            total_rcc += rcc
-            total_sind += sind
-            linhas.append([data, rmc, rcc, sind])
+        # Calcular totais
+        totais = df.groupby("Tipo")["Valor"].sum()
+        st.subheader("Totais por Tipo")
+        for tipo, total in totais.items():
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric(f"Total {tipo}", f"R$ {total:,.2f}")
+            with col2:
+                st.metric("Em Dobro", f"R$ {total * 2:,.2f}")
+            with col3:
+                st.metric("Com Indenização", f"R$ {total * 2 + 10000:,.2f}")
 
-        df = pd.DataFrame(linhas, columns=["Data", "RMC (217)", "RCC (268)", "SINDICATO"])
-        st.dataframe(df.style.format({col: "R$ {:,.2f}" for col in df.columns[1:]}), use_container_width=True)
-
-        st.subheader("Totais")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Total RMC", f"R$ {total_rmc:,.2f}")
-            st.metric("Em Dobro", f"R$ {total_rmc * 2:,.2f}")
-        with col2:
-            st.metric("Total RCC", f"R$ {total_rcc:,.2f}")
-            st.metric("Em Dobro", f"R$ {total_rcc * 2:,.2f}")
-        with col3:
-            st.metric("Total SINDICATO", f"R$ {total_sind:,.2f}")
-            st.metric("Em Dobro", f"R$ {total_sind * 2:,.2f}")
-
+        valor_total = totais.sum()
         st.divider()
-        st.metric("VALOR DA CAUSA (RMC + RCC + SIND x2 + Indenização R$10.000)", f"R$ {(total_rmc + total_rcc + total_sind)*2 + 10000:,.2f}")
+        st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
+        # Exportar para Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df.to_excel(writer, index=False, sheet_name="Créditos INSS")
+            df.to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
             "📥 Baixar Planilha Excel",
             data=output.getvalue(),
-            file_name="planilha_inss.xlsx",
+            file_name="planilha_detalhada_inss.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
         os.remove(caminho)
+
 
 
 
