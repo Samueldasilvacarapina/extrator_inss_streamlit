@@ -4,7 +4,6 @@ from extrator import processar_pdf
 import tempfile
 import os
 from io import BytesIO
-from datetime import datetime
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
@@ -18,24 +17,25 @@ if uploaded_file:
         caminho = tmp_file.name
 
     with st.spinner("Processando PDF..."):
-        dados = processar_pdf(caminho, debug=False)
+        dados = processar_pdf(caminho)
 
     if not dados:
         st.error("Não foi possível extrair dados do PDF.")
     else:
         df = pd.DataFrame(dados)
-        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y")
-        df = df.sort_values("Data")
-        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df = df.drop(columns=["Valor"])  # Remove a coluna bruta
+        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y")  # converte para datetime
+        df = df.sort_values("Data")  # ordena da menor para a maior data
+        df["Data"] = df["Data"].dt.strftime("%d/%m/%Y")  # formata para dd/mm/aaaa
+        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")  # nova coluna formatada
+
+        df = df[["Data", "Tipo", "Valor Formatado"]]  # remove coluna 'Valor'
 
         st.success("Dados extraídos com sucesso!")
         st.dataframe(df, use_container_width=True)
 
-        # Cálculos
+        # Recalcula os totais com base na versão original
         df_raw = pd.DataFrame(dados)
         totais = df_raw.groupby("Tipo")["Valor"].sum()
-
         st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
             col1, col2, col3 = st.columns(3)
@@ -50,9 +50,10 @@ if uploaded_file:
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
+        # Exportar para Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
-            df[["Data", "Tipo", "Valor Formatado"]].to_excel(writer, index=False, sheet_name="Detalhado")
+            df.to_excel(writer, index=False, sheet_name="Detalhado")
         st.download_button(
             "📥 Baixar Planilha Excel",
             data=output.getvalue(),
@@ -61,6 +62,7 @@ if uploaded_file:
         )
 
         os.remove(caminho)
+
 
 
 
