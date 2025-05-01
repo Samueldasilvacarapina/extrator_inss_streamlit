@@ -23,19 +23,25 @@ if uploaded_file:
         st.error("Não foi possível extrair dados do PDF.")
     else:
         df = pd.DataFrame(dados)
-        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y")  # converte para datetime
-        df = df.sort_values("Data")  # ordena da menor para a maior data
-        df["Data"] = df["Data"].dt.strftime("%d/%m/%Y")  # formata para dd/mm/aaaa
-        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")  # nova coluna formatada
+        df["Valor"] = df["Valor"].astype(float)
+        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y")
+        df = df.sort_values("Data")
+        df["Data"] = df["Data"].dt.strftime("%d/%m/%Y")
+        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
 
-        df = df[["Data", "Tipo", "Valor Formatado"]]  # remove coluna 'Valor'
+        # ✅ Remove duplicatas exatas
+        df = df.drop_duplicates(subset=["Data", "Tipo", "Valor Formatado"])
+
+        # ✅ Mantém apenas as colunas desejadas
+        df = df[["Data", "Tipo", "Valor Formatado"]]
 
         st.success("Dados extraídos com sucesso!")
         st.dataframe(df, use_container_width=True)
 
-        # Recalcula os totais com base na versão original
+        # Recalcular os totais
         df_raw = pd.DataFrame(dados)
         totais = df_raw.groupby("Tipo")["Valor"].sum()
+
         st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
             col1, col2, col3 = st.columns(3)
@@ -50,7 +56,7 @@ if uploaded_file:
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
-        # Exportar para Excel
+        # Exportar Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             df.to_excel(writer, index=False, sheet_name="Detalhado")
@@ -62,6 +68,7 @@ if uploaded_file:
         )
 
         os.remove(caminho)
+
 
 
 
