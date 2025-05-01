@@ -16,27 +16,20 @@ rubricas_textuais = {
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia(linha):
-    # Padrão 1: intervalo com "a"
-    match = re.search(r'(\d{2})/(\d{2})/(\d{4})\s*(?:a|-)\s*(\d{2})/(\d{2})/(\d{4})', linha)
+def extrair_competencia_periodo(linha):
+    match = re.search(r'(\d{2})/(\d{2})/(\d{4})\s*a\s*(\d{2})/(\d{2})/(\d{4})', linha)
     if match:
         return f"01/{match.group(2)}/{match.group(3)}"
-
-    # Padrão 2: apenas mês/ano
-    match = re.search(r'(\d{2})/(\d{4})', linha)
-    if match:
-        return f"01/{match.group(1)}/{match.group(2)}"
-
     return None
 
 def extrair_nome_banco(linha):
-    match = re.search(r'RMC.*?- ([A-Z\s]+)', linha)
+    match = re.search(r'RMC.*?- ([A-Z0-9 \-\.]+)', linha)
     if not match:
-        match = re.search(r'RCC.*?- ([A-Z\s]+)', linha)
+        match = re.search(r'RCC.*?- ([A-Z0-9 \-\.]+)', linha)
     return match.group(1).strip() if match else "BANCO"
 
 def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s*R\$?', linha, re.IGNORECASE)
+    match = re.search(r'(CONTRIB[^R\$]*)', linha, re.IGNORECASE)
     return match.group(1).strip() if match else "SINDICATO"
 
 def processar_pdf(caminho_pdf, debug=False):
@@ -52,7 +45,7 @@ def processar_pdf(caminho_pdf, debug=False):
             linhas = texto.split("\n")
 
             for linha in linhas:
-                nova_data = extrair_competencia(linha)
+                nova_data = extrair_competencia_periodo(linha)
                 if nova_data:
                     competencia_atual = nova_data
 
@@ -81,4 +74,5 @@ def processar_pdf(caminho_pdf, debug=False):
 
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
     return dados
+
 
