@@ -18,7 +18,7 @@ if uploaded_file:
         caminho = tmp_file.name
 
     with st.spinner("Processando PDF..."):
-        dados = processar_pdf(caminho)
+       dados = processar_pdf(caminho, debug=True)
 
     if not dados:
         st.error("Não foi possível extrair dados do PDF.")
