@@ -35,14 +35,14 @@ if uploaded_file:
         st.success("✅ Dados extraídos com sucesso!")
         st.dataframe(df, use_container_width=True)
 
-        # TOTAIS POR TIPO
+        # TOTAIS
         df_raw = pd.DataFrame(dados)
         totais = df_raw.groupby("Tipo")["Valor"].sum()
 
         st.subheader("Totais por Tipo")
-        totais_filtrados = totais[totais > 0]  # remove valores zero
-
+        totais_filtrados = totais[totais > 0]  # remove totais zerados
         resumo = []
+
         for tipo, total in totais_filtrados.items():
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -57,17 +57,16 @@ if uploaded_file:
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
-        # CAMPO DE ANOTAÇÃO
+        # ANOTAÇÃO
         st.subheader("📝 Anotações Finais")
         anotacao = st.text_area("Escreva anotações que serão incluídas no PDF gerado:", height=150)
 
-        # GERAR PDF
+        # GERA PDF
         def gerar_pdf(df, resumo, anotacao):
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", "B", 14)
             pdf.cell(0, 10, "Relatório de Histórico de Créditos - INSS", ln=True, align="C")
-            pdf.set_font("Arial", "", 10)
             pdf.ln(10)
 
             pdf.set_font("Arial", "B", 12)
@@ -75,7 +74,8 @@ if uploaded_file:
             pdf.set_font("Arial", "", 10)
 
             for i, row in df.iterrows():
-                pdf.cell(0, 8, f"{row['Data']} - {row['Tipo']} - {row['Valor Formatado']}", ln=True)
+                linha = f"{row['Data']} - {row['Tipo']} - {row['Valor Formatado']}"
+                pdf.cell(0, 8, linha, ln=True)
 
             pdf.ln(5)
             pdf.set_font("Arial", "B", 12)
@@ -84,7 +84,8 @@ if uploaded_file:
             for tipo, total in resumo:
                 em_dobro = total * 2
                 com_indenizacao = em_dobro + 10000
-                pdf.cell(0, 8, f"{tipo}: Total = R$ {total:,.2f} | Em Dobro = R$ {em_dobro:,.2f} | Com Indenização = R$ {com_indenizacao:,.2f}", ln=True)
+                linha = f"{tipo}: Total = R$ {total:,.2f} | Em Dobro = R$ {em_dobro:,.2f} | Com Indenização = R$ {com_indenizacao:,.2f}"
+                pdf.multi_cell(0, 8, linha)
 
             pdf.ln(5)
             pdf.set_font("Arial", "B", 12)
@@ -105,7 +106,7 @@ if uploaded_file:
         pdf_bytes = gerar_pdf(df, resumo, anotacao)
 
         st.download_button(
-            label="📥 Baixar Relatório em PDF",
+            label="📄 Baixar Relatório em PDF",
             data=pdf_bytes,
             file_name="relatorio_inss.pdf",
             mime="application/pdf"
