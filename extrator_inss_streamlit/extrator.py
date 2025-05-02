@@ -1,6 +1,7 @@
 import pdfplumber
 import re
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 import pytesseract
 from pdf2image import convert_from_path
 
@@ -19,33 +20,59 @@ def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
 def extrair_competencia(linha):
-    match = re.search(r'de\s+(\d{2})/(\d{2})/(\d{4})\s+a\s+(\d{2})/(\d{2})/(\d{4})', linha, re.IGNORECASE)
-    if match:
-        return f"01/{match.group(2)}/{match.group(3)}"
     match = re.search(r'(\d{2})/(\d{4})', linha)
-    if match:
-        return f"01/{match.group(1)}/{match.group(2)}"
-    return None
+    return f"01/{match.group(1)}/{match.group(2)}" if match else None
 
 def extrair_nome_banco(linha):
     match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
     return match.group(2).strip() if match else "BANCO"
 
 def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', re.sub(r'\s+', ' ', linha), re.IGNORECASE)
+    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
     return match.group(1).strip() if match else "SINDICATO"
 
 def extrair_linhas(texto):
     return texto.split("\n")
+
+def preencher_meses(dados):
+    if not dados:
+        return dados
+
+    datas = sorted(set(datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados))
+    inicio = datas[0]
+    fim = datas[-1]
+
+    meses_completos = []
+    atual = inicio
+    while atual <= fim:
+        meses_completos.append(atual.strftime("%d/%m/%Y"))
+        atual += relativedelta(months=1)
+
+    dados_por_data = {(d["Data"], d["Tipo"]): d for d in dados}
+    tipos = set(d["Tipo"] for d in dados)
+
+    dados_preenchidos = []
+    for data in meses_completos:
+        for tipo in tipos:
+            chave = (data, tipo)
+            if chave in dados_por_data:
+                dados_preenchidos.append(dados_por_data[chave])
+            else:
+                dados_preenchidos.append({
+                    "Data": data,
+                    "Tipo": tipo,
+                    "Valor": 0.0
+                })
+
+    return dados_preenchidos
 
 def processar_linhas(linhas):
     dados = []
     competencia = None
 
     for linha in linhas:
-        nova = extrair_competencia(linha)
-        if nova:
-            competencia = nova
+        if not competencia:
+            competencia = extrair_competencia(linha)
 
         for tipo, codigo in rubricas_alvo.items():
             if codigo in linha:
@@ -94,4 +121,5 @@ def processar_pdf(caminho_pdf):
 
     dados = [d for d in dados if d.get("Valor") is not None]
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+    dados = preencher_meses(dados)
     return dados
