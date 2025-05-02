@@ -26,6 +26,7 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
         df = df.dropna(subset=["Data"]).drop_duplicates()
+        df = df.sort_values("Data")
         df["Data"] = df["Data"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
         df = df[["Data", "Tipo", "Valor Formatado"]]
@@ -61,3 +62,4 @@ if uploaded_file:
         )
 
         os.remove(caminho)
+
