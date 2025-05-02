@@ -100,7 +100,9 @@ if uploaded_file:
                     pdf.multi_cell(0, 8, linha)
 
             output = BytesIO()
-            pdf.output(output)
+            pdf_bytes = pdf.output(dest='S').encode('latin1')
+return BytesIO(pdf_bytes)
+
             return output.getvalue()
 
         pdf_bytes = gerar_pdf(df, resumo, anotacao)
