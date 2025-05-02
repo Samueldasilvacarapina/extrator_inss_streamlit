@@ -25,14 +25,13 @@ if uploaded_file:
     else:
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-        df = df.dropna(subset=["Data"]).drop_duplicates()
-        df = df.sort_values("Data")
+        df = df.dropna(subset=["Data"])
         df["Data"] = df["Data"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df = df[["Data", "Tipo", "Valor Formatado"]]
+        df = df[["Data", "Tipo", "Valor Formatado"]]  # Apenas as colunas finais
 
         st.success("✅ Dados extraídos com sucesso!")
-        st.dataframe(df, use_container_width=True)
+        st.dataframe(df, use_container_width=True, height=800)  # aumenta a altura da tabela
 
         df_raw = pd.DataFrame(dados)
         totais = df_raw.groupby("Tipo")["Valor"].sum()
@@ -62,4 +61,3 @@ if uploaded_file:
         )
 
         os.remove(caminho)
-
