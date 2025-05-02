@@ -19,8 +19,16 @@ def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
 def extrair_competencia(linha):
+    # Agora tenta capturar "01/MM/YYYY" e também "de DD/MM/YYYY a DD/MM/YYYY"
     match = re.search(r'(\d{2})/(\d{4})', linha)
-    return f"01/{match.group(1)}/{match.group(2)}" if match else None
+    if match:
+        return f"01/{match.group(1)}/{match.group(2)}"
+    
+    periodo = re.search(r'de\s+(\d{2})/(\d{2})/(\d{4})\s+a\s+(\d{2})/(\d{2})/(\d{4})', linha, re.IGNORECASE)
+    if periodo:
+        return f"01/{periodo.group(2)}/{periodo.group(3)}"
+    
+    return None
 
 def extrair_nome_banco(linha):
     match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
@@ -38,8 +46,9 @@ def processar_linhas(linhas):
     competencia = None
 
     for linha in linhas:
-        if not competencia:
-            competencia = extrair_competencia(linha)
+        nova_comp = extrair_competencia(linha)
+        if nova_comp:
+            competencia = nova_comp
 
         for tipo, codigo in rubricas_alvo.items():
             if codigo in linha:
