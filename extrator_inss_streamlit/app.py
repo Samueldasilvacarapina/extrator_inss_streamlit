@@ -25,18 +25,22 @@ if uploaded_file:
     else:
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-        df = df.dropna(subset=["Data"]).drop_duplicates()
+        df = df.dropna(subset=["Data"])
+        df = df.sort_values("Data")
         df["Data"] = df["Data"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
         df = df[["Data", "Tipo", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
-        st.dataframe(df, use_container_width=True, height=len(df) * 35)
+        st.dataframe(df, use_container_width=True)
 
         df_raw = pd.DataFrame(dados)
         totais = df_raw.groupby("Tipo")["Valor"].sum()
+
         st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
+            if "SEM DADOS" in tipo:
+                continue  # não mostrar totais de SEM DADOS
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric(f"Total {tipo}", f"R$ {total:,.2f}")
@@ -45,7 +49,7 @@ if uploaded_file:
             with col3:
                 st.metric("Com Indenização", f"R$ {total * 2 + 10000:,.2f}")
 
-        total_geral = totais.sum()
+        total_geral = totais[[k for k in totais.index if "SEM DADOS" not in k]].sum()
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {total_geral * 2 + 10000:,.2f}")
 
