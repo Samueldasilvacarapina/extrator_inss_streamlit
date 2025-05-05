@@ -66,15 +66,20 @@ def processar_linhas(linhas):
     return dados
 
 def preencher_meses_faltantes(dados):
-    datas_existentes = set(d["Data"] for d in dados)
-    datas_convertidas = [datetime.strptime(d, "%d/%m/%Y") for d in datas_existentes]
-    if not datas_convertidas:
-        return dados
+    # Filtra apenas as datas com valor real (maior que 0)
+    dados_reais = [d for d in dados if d["Valor"] > 0]
+    if not dados_reais:
+        return dados  # Nenhum dado real, nada a preencher
 
+    # Determina o intervalo entre a menor e maior data com valor real
+    datas_convertidas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados_reais]
     data_inicial = min(datas_convertidas)
     data_final = max(datas_convertidas)
-    atual = data_inicial
 
+    # Cria conjunto das datas existentes
+    datas_existentes = set(d["Data"] for d in dados)
+
+    atual = data_inicial
     while atual <= data_final:
         data_str = atual.strftime("%d/%m/%Y")
         if data_str not in datas_existentes:
@@ -115,5 +120,3 @@ def processar_pdf(caminho_pdf):
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
 
     return dados
-
-
