@@ -86,7 +86,17 @@ def preencher_meses_faltantes(dados):
         atual += relativedelta(months=1)
 
     return dados
+    def agrupar_por_data_tipo(dados):
+    agrupado = {}
+    for item in dados:
+        chave = (item["Data"], item["Tipo"])
+        if chave in agrupado:
+            agrupado[chave]["Valor"] += item["Valor"]
+        else:
+            agrupado[chave] = item.copy()
+    return list(agrupado.values())
 
+    
 def processar_pdf(caminho_pdf):
     dados = []
 
@@ -110,8 +120,8 @@ def processar_pdf(caminho_pdf):
         except Exception:
             pass
 
-    dados = [d for d in dados if d.get("Valor") is not None]
-    dados = preencher_meses_faltantes(dados)
+       dados = preencher_meses_faltantes(dados)
+    dados = agrupar_por_data_tipo(dados)
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
 
     return dados
