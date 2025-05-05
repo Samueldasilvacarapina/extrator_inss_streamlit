@@ -1,6 +1,6 @@
 import pdfplumber
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pytesseract
 from pdf2image import convert_from_path
@@ -65,28 +65,43 @@ def processar_linhas(linhas):
 
     return dados
 
-def preencher_meses_faltantes(dados):
-    datas_existentes = set(d["Data"] for d in dados)
-    datas_convertidas = [datetime.strptime(d, "%d/%m/%Y") for d in datas_existentes]
-    if not datas_convertidas:
-        return dados
+def preencher_meses_faltantes_por_tipo(dados):
+    # Agrupa os dados por Tipo
+    agrupado = {}
+    for item in dados:
+        tipo = item["Tipo"]
+        if tipo not in agrupado:
+            agrupado[tipo] = []
+        agrupado[tipo].append(item)
 
-    data_inicial = min(datas_convertidas)
-    data_final = max(datas_convertidas)
-    atual = data_inicial
+    dados_completos = []
 
-    while atual <= data_final:
-        data_str = atual.strftime("%d/%m/%Y")
-        if data_str not in datas_existentes:
-            dados.append({
-                "Data": data_str,
-                "Tipo": "SEM DADOS",
-                "Valor": 0.0
-            })
-        atual += relativedelta(months=1)
+    for tipo, entradas in agrupado.items():
+        datas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in entradas]
+        if not datas:
+            continue
+        data_ini = min(datas)
+        data_fim = max(datas)
 
-    return dados
-    def agrupar_por_data_tipo(dados):
+        # Mapeia as datas existentes
+        datas_existentes = {d["Data"] for d in entradas}
+
+        atual = data_ini
+        while atual <= data_fim:
+            data_str = atual.strftime("%d/%m/%Y")
+            if data_str not in datas_existentes:
+                dados_completos.append({
+                    "Data": data_str,
+                    "Tipo": tipo,
+                    "Valor": 0.0
+                })
+            atual += relativedelta(months=1)
+
+        dados_completos.extend(entradas)
+
+    return dados_completos
+
+def agrupar_por_data_tipo(dados):
     agrupado = {}
     for item in dados:
         chave = (item["Data"], item["Tipo"])
@@ -96,7 +111,6 @@ def preencher_meses_faltantes(dados):
             agrupado[chave] = item.copy()
     return list(agrupado.values())
 
-    
 def processar_pdf(caminho_pdf):
     dados = []
 
@@ -120,8 +134,10 @@ def processar_pdf(caminho_pdf):
         except Exception:
             pass
 
-       dados = preencher_meses_faltantes(dados)
+    dados = [d for d in dados if d.get("Valor") is not None]
+    dados = preencher_meses_faltantes_por_tipo(dados)
     dados = agrupar_por_data_tipo(dados)
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
 
     return dados
+
