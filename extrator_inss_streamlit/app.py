@@ -83,7 +83,11 @@ if uploaded_file:
         df = df[["Data", "Tipo", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
-        st.dataframe(df, use_container_width=True)
+
+# Oculta linhas com data 01/2015 apenas na exibição
+df_exibicao = df[df["Data"] != "01/2015"]
+st.dataframe(df_exibicao, use_container_width=True)
+
 
         # Totais
         df_raw = pd.DataFrame(dados)
