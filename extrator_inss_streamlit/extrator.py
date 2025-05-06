@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import pytesseract
 from pdf2image import convert_from_path
+from collections import defaultdict
 
 rubricas_alvo = {
     "RMC": "217",
@@ -59,12 +60,11 @@ def processar_linhas(linhas):
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
                 if valor_match and competencia:
                     valor = formatar_valor(valor_match.group(1))
-                    if valor_liquido is not None and valor >= valor_liquido:
-                        continue  # Ignora se valor da rubrica >= valor líquido (não é desconto)
                     dados.append({
                         "Data": competencia,
                         "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
-                        "Valor": valor
+                        "Valor": valor,
+                        "Liquido": valor_liquido
                     })
 
         for tipo, termos in rubricas_textuais.items():
@@ -72,12 +72,11 @@ def processar_linhas(linhas):
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
                 if valor_match and competencia:
                     valor = formatar_valor(valor_match.group(1))
-                    if valor_liquido is not None and valor >= valor_liquido:
-                        continue  # Mesmo filtro
                     dados.append({
                         "Data": competencia,
                         "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
-                        "Valor": valor
+                        "Valor": valor,
+                        "Liquido": valor_liquido
                     })
 
     return dados
@@ -106,6 +105,23 @@ def preencher_meses_faltantes(dados):
 
     return dados
 
+def filtrar_apenas_descontos_reais(dados):
+    soma_por_mes = defaultdict(float)
+    liquido_por_mes = {}
+
+    for d in dados:
+        soma_por_mes[d["Data"]] += d["Valor"]
+        if d["Liquido"] is not None:
+            liquido_por_mes[d["Data"]] = d["Liquido"]
+
+    # Só manter meses onde a soma dos descontos é menor que o valor líquido (ou seja, desconto real)
+    meses_validos = {
+        data for data in soma_por_mes
+        if data in liquido_por_mes and soma_por_mes[data] < liquido_por_mes[data]
+    }
+
+    return [d for d in dados if d["Data"] in meses_validos]
+
 def processar_pdf(caminho_pdf):
     dados = []
 
@@ -130,6 +146,7 @@ def processar_pdf(caminho_pdf):
             pass
 
     dados = [d for d in dados if d.get("Valor") is not None]
+    dados = filtrar_apenas_descontos_reais(dados)  # << FILTRO AQUI
     dados = preencher_meses_faltantes(dados)
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
 
