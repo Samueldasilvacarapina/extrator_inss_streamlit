@@ -5,6 +5,7 @@ from fpdf import FPDF
 from io import BytesIO
 import tempfile
 import os
+from datetime import datetime
 
 st.set_page_config(page_title="Extrator INSS", layout="wide")
 st.title("📄 Extrator de Histórico de Créditos - INSS")
@@ -21,7 +22,6 @@ def gerar_pdf(df, resumo, anotacao):
     pdf.cell(200, 10, "Extrato de Créditos INSS", ln=True, align="C")
     pdf.ln(10)
 
-    # Tabela
     pdf.set_font("Arial", 'B', size=10)
     pdf.cell(40, 8, "Data", border=1)
     pdf.cell(90, 8, "Tipo", border=1)
@@ -32,7 +32,6 @@ def gerar_pdf(df, resumo, anotacao):
         pdf.cell(90, 8, row["Tipo"][:40], border=1)
         pdf.cell(40, 8, row["Valor Formatado"], border=1, ln=True)
 
-    # Resumo
     pdf.ln(5)
     pdf.set_font("Arial", 'B', size=12)
     pdf.cell(200, 10, "Totais por Tipo", ln=True)
@@ -46,20 +45,17 @@ def gerar_pdf(df, resumo, anotacao):
         pdf.cell(0, 8, f"Com Indenização: R$ {total * 2 + 10000:,.2f}", ln=True)
         pdf.ln(2)
 
-    # Valor da causa
     valor_total = sum(valor for tipo, valor in resumo.items() if "SEM DADOS" not in tipo)
     pdf.set_font("Arial", 'B', size=11)
     pdf.cell(0, 10, f"VALOR DA CAUSA (total x2 + R$10.000): R$ {valor_total * 2 + 10000:,.2f}", ln=True)
     pdf.ln(5)
 
-    # Anotação
     pdf.set_font("Arial", 'B', size=11)
     pdf.cell(0, 10, "Anotações:", ln=True)
     pdf.set_font("Arial", size=10)
     for linha in anotacao.split("\n"):
         pdf.multi_cell(0, 8, linha)
 
-    # Salva em memória
     pdf_bytes = pdf.output(dest='S').encode('latin1')
     return BytesIO(pdf_bytes)
 
@@ -76,21 +72,22 @@ if uploaded_file:
         st.error("Não foi possível extrair dados do PDF.")
     else:
         df = pd.DataFrame(dados)
-        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
-        df = df.dropna(subset=["Data"]).drop_duplicates()
-        df["Data"] = df["Data"].dt.strftime("%m/%Y")
+        df["DataRaw"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
+        df = df.dropna(subset=["DataRaw"]).drop_duplicates()
+
+        # Filtra apenas entre a menor e maior data com VALOR > 0
+        datas_validas = df[df["Valor"] > 0]["DataRaw"]
+        data_ini, data_fim = datas_validas.min(), datas_validas.max()
+        df = df[(df["DataRaw"] >= data_ini) & (df["DataRaw"] <= data_fim)]
+
+        df["Data"] = df["DataRaw"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df = df[["Data", "Tipo", "Valor Formatado"]]
+        df = df[["Data", "Tipo", "Valor", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
+        st.dataframe(df[["Data", "Tipo", "Valor Formatado"]], use_container_width=True)
 
-        # Oculta linhas com data 01/2015 na exibição
-        df_exibicao = df[df["Data"] != "01/2015"]
-        st.dataframe(df_exibicao, use_container_width=True)
-
-        # Totais
-        df_raw = pd.DataFrame(dados)
-        totais = df_raw.groupby("Tipo")["Valor"].sum()
+        totais = df.groupby("Tipo")["Valor"].sum()
         st.subheader("Totais por Tipo")
 
         for tipo, total in totais.items():
@@ -108,15 +105,12 @@ if uploaded_file:
         st.divider()
         st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
-        # ✍️ Anotações e botão para gerar PDF
         anotacao = st.text_area("Anotações Finais", height=150)
 
-        # Oculta linhas com data 01/2015 no PDF
-        df_filtrado = df[df["Data"] != "01/2015"]
-        pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
+        pdf_bytes = gerar_pdf(df[["Data", "Tipo", "Valor Formatado"]], totais, anotacao)
 
         st.download_button(
-            "📥 Baixar Relatório PDF",
+            "📅 Baixar Relatório PDF",
             data=pdf_bytes.getvalue(),
             file_name="relatorio_inss.pdf",
             mime="application/pdf"
