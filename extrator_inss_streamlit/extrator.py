@@ -1,7 +1,6 @@
 import pdfplumber
 import re
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
 import pytesseract
 from pdf2image import convert_from_path
 
@@ -46,64 +45,29 @@ def processar_linhas(linhas):
         if nova_comp:
             competencia = nova_comp
 
-        # RMC/RCC - com base no código 217/268
         for tipo, codigo in rubricas_alvo.items():
             if codigo in linha:
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
                 if valor_match:
                     valor = formatar_valor(valor_match.group(1))
-                    if valor is not None:
+                    if valor:
                         dados.append({
                             "Data": competencia or "01/01/1900",
                             "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
                             "Valor": valor
                         })
 
-        # SINDICATO - com base em palavras-chave
         for tipo, termos in rubricas_textuais.items():
             if any(p in linha.upper() for p in termos):
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
                 if valor_match:
                     valor = formatar_valor(valor_match.group(1))
-                    if valor is not None:
+                    if valor:
                         dados.append({
                             "Data": competencia or "01/01/1900",
                             "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
                             "Valor": valor
                         })
-
-    return dados
-
-def preencher_meses_faltantes(dados):
-    if not dados:
-        return dados
-
-    # Evita repetições exatas
-    vistos = set()
-    dados = [d for d in dados if (d["Data"], d["Tipo"]) not in vistos and not vistos.add((d["Data"], d["Tipo"]))]
-
-    # Só entre meses com valores reais
-    dados_reais = [d for d in dados if d["Valor"] > 0 and "SEM DADOS" not in d["Tipo"]]
-    if not dados_reais:
-        return dados
-
-    datas_convertidas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados_reais]
-    data_inicial = min(datas_convertidas)
-    data_final = max(datas_convertidas)
-
-    meses_existentes = set(datetime.strptime(d["Data"], "%d/%m/%Y").strftime("%m/%Y") for d in dados)
-
-    atual = data_inicial
-    while atual <= data_final:
-        mes_ano = atual.strftime("%m/%Y")
-        data_str = atual.strftime("%d/%m/%Y")
-        if mes_ano not in meses_existentes:
-            dados.append({
-                "Data": data_str,
-                "Tipo": "SEM DADOS",
-                "Valor": 0.0
-            })
-        atual += relativedelta(months=1)
 
     return dados
 
@@ -130,8 +94,10 @@ def processar_pdf(caminho_pdf):
         except Exception:
             pass
 
-    dados = [d for d in dados if d.get("Valor") is not None]
-    dados = preencher_meses_faltantes(dados)
+    # Filtra apenas valores reais (não nulos ou zero)
+    dados = [d for d in dados if d.get("Valor") not in (None, 0.0)]
+
+    # Ordena do mais antigo pro mais recente
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
 
     return dados
