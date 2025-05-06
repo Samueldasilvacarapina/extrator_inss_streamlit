@@ -34,18 +34,19 @@ def extrair_nome_sindicato(linha):
 def extrair_linhas(texto):
     return texto.split("\n")
 
-# 🔧 Função atualizada para evitar falsos positivos nas rubricas
 def processar_linhas(linhas):
     dados = []
     competencia = None
 
     for linha in linhas:
+        if "CRÉDITO" in linha.upper() or "CRED" in linha.upper():
+            continue  # Ignora lançamentos de crédito
+
         nova_comp = extrair_competencia(linha)
         if nova_comp:
             competencia = nova_comp
 
         for tipo, codigo in rubricas_alvo.items():
-            # Verifica se o código está isolado (não embutido em outro número)
             if re.search(rf'\b{codigo}\b', linha):
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
                 if valor_match and competencia:
