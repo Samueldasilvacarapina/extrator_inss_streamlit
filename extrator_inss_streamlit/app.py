@@ -1,4 +1,4 @@
- import streamlit as st
+import streamlit as st
 import pandas as pd
 from extrator import processar_pdf
 from fpdf import FPDF
