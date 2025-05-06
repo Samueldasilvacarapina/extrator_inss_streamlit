@@ -78,21 +78,24 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
         df = df.dropna(subset=["Data"]).drop_duplicates()
+        df = df[df["Data"].dt.year != 2015]  # ❌ remove ano de 2015
         df["Data"] = df["Data"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
         df = df[["Data", "Tipo", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
 
-        # Oculta linhas com data 01/2015 na exibição
-        df_exibicao = df[df["Data"] != "01/2015"]
-        st.dataframe(df_exibicao, use_container_width=True)
+        # Exibe tabela sem 2015
+        st.dataframe(df, use_container_width=True)
 
         # Totais
         df_raw = pd.DataFrame(dados)
+        df_raw["Data"] = pd.to_datetime(df_raw["Data"], format="%d/%m/%Y", errors="coerce")
+        df_raw = df_raw.dropna(subset=["Data"])
+        df_raw = df_raw[df_raw["Data"].dt.year != 2015]  # ❌ remove ano de 2015
         totais = df_raw.groupby("Tipo")["Valor"].sum()
-        st.subheader("Totais por Tipo")
 
+        st.subheader("Totais por Tipo")
         for tipo, total in totais.items():
             if "SEM DADOS" in tipo:
                 continue
@@ -111,8 +114,8 @@ if uploaded_file:
         # ✍️ Anotações e botão para gerar PDF
         anotacao = st.text_area("Anotações Finais", height=150)
 
-        # Oculta linhas com data 01/2015 no PDF
-        df_filtrado = df[df["Data"] != "01/2015"]
+        # Gera PDF sem dados de 2015
+        df_filtrado = df[~df["Data"].str.endswith("/2015")]
         pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
 
         st.download_button(
