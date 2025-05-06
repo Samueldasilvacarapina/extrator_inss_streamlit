@@ -85,8 +85,8 @@ if uploaded_file:
         st.success("✅ Dados extraídos com sucesso!")
 
 # Oculta linhas com data 01/2015 apenas na exibição
-df_exibicao = df[df["Data"] != "01/2015"]
-st.dataframe(df_exibicao, use_container_width=True)
+        df_exibicao = df[df["Data"] != "01/2015"]
+        st.dataframe(df_exibicao, use_container_width=True)
 
 
         # Totais
