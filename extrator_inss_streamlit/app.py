@@ -84,10 +84,9 @@ if uploaded_file:
 
         st.success("✅ Dados extraídos com sucesso!")
 
-# Oculta linhas com data 01/2015 apenas na exibição
+        # Oculta linhas com data 01/2015 na exibição
         df_exibicao = df[df["Data"] != "01/2015"]
         st.dataframe(df_exibicao, use_container_width=True)
-
 
         # Totais
         df_raw = pd.DataFrame(dados)
@@ -111,7 +110,11 @@ if uploaded_file:
 
         # ✍️ Anotações e botão para gerar PDF
         anotacao = st.text_area("Anotações Finais", height=150)
-        pdf_bytes = gerar_pdf(df, totais, anotacao)
+
+        # Oculta linhas com data 01/2015 no PDF
+        df_filtrado = df[df["Data"] != "01/2015"]
+        pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
+
         st.download_button(
             "📥 Baixar Relatório PDF",
             data=pdf_bytes.getvalue(),
@@ -120,4 +123,3 @@ if uploaded_file:
         )
 
         os.remove(caminho)
-
