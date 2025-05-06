@@ -86,7 +86,7 @@ if uploaded_file:
             if "SEM DADOS" in tipo:
                 continue
             st.subheader(f"💳 Descontos do tipo: {tipo}")
-            df_tipo = df[(df["Tipo"] == tipo) & (df["Data"] != "01/2015")]
+            df_tipo = df[(df["Tipo"] == tipo) & (~df["Data"].str.endswith("/2015"))]
             df_exibicao = df_tipo[["Data", "Tipo", "Valor Formatado"]]
             st.dataframe(df_exibicao, use_container_width=True)
 
@@ -112,7 +112,7 @@ if uploaded_file:
 
         anotacao = st.text_area("✍️ Anotações Finais", height=150)
 
-        df_filtrado = df[df["Data"] != "01/2015"]
+        df_filtrado = df[~df["Data"].str.endswith("/2015")]
         df_pdf = df_filtrado[["Data", "Tipo", "Valor Formatado"]]
         pdf_bytes = gerar_pdf(df_pdf, totais, anotacao)
 
@@ -124,3 +124,4 @@ if uploaded_file:
         )
 
         os.remove(caminho)
+
