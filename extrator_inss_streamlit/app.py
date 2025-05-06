@@ -46,20 +46,17 @@ def gerar_pdf(df, resumo, anotacao):
         pdf.cell(0, 8, f"Com Indenização: R$ {total * 2 + 10000:,.2f}", ln=True)
         pdf.ln(2)
 
-    # Valor da causa
     valor_total = sum(valor for tipo, valor in resumo.items() if "SEM DADOS" not in tipo)
     pdf.set_font("Arial", 'B', size=11)
     pdf.cell(0, 10, f"VALOR DA CAUSA (total x2 + R$10.000): R$ {valor_total * 2 + 10000:,.2f}", ln=True)
     pdf.ln(5)
 
-    # Anotação
     pdf.set_font("Arial", 'B', size=11)
     pdf.cell(0, 10, "Anotações:", ln=True)
     pdf.set_font("Arial", size=10)
     for linha in anotacao.split("\n"):
         pdf.multi_cell(0, 8, linha)
 
-    # Salva em memória
     pdf_bytes = pdf.output(dest='S').encode('latin1')
     return BytesIO(pdf_bytes)
 
@@ -80,18 +77,23 @@ if uploaded_file:
         df = df.dropna(subset=["Data"]).drop_duplicates()
         df["Data"] = df["Data"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df = df[["Data", "Tipo", "Valor Formatado"]]
+        df = df[["Data", "Tipo", "Valor", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
 
-        # Oculta linhas com data 01/2015 na exibição
-        df_exibicao = df[df["Data"] != "01/2015"]
-        st.dataframe(df_exibicao, use_container_width=True)
+        tipos_unicos = df["Tipo"].unique()
+        for tipo in tipos_unicos:
+            if "SEM DADOS" in tipo:
+                continue
+            st.subheader(f"💳 Descontos do tipo: {tipo}")
+            df_tipo = df[(df["Tipo"] == tipo) & (df["Data"] != "01/2015")]
+            df_exibicao = df_tipo[["Data", "Tipo", "Valor Formatado"]]
+            st.dataframe(df_exibicao, use_container_width=True)
 
-        # Totais
-        df_raw = pd.DataFrame(dados)
-        totais = df_raw.groupby("Tipo")["Valor"].sum()
-        st.subheader("Totais por Tipo")
+        st.divider()
+        st.subheader("📊 Totais por Tipo")
+
+        totais = df.groupby("Tipo")["Valor"].sum()
 
         for tipo, total in totais.items():
             if "SEM DADOS" in tipo:
@@ -106,14 +108,13 @@ if uploaded_file:
 
         valor_total = sum(valor for tipo, valor in totais.items() if "SEM DADOS" not in tipo)
         st.divider()
-        st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
+        st.metric("💰 VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
 
-        # ✍️ Anotações e botão para gerar PDF
-        anotacao = st.text_area("Anotações Finais", height=150)
+        anotacao = st.text_area("✍️ Anotações Finais", height=150)
 
-        # Oculta linhas com data 01/2015 no PDF
         df_filtrado = df[df["Data"] != "01/2015"]
-        pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
+        df_pdf = df_filtrado[["Data", "Tipo", "Valor Formatado"]]
+        pdf_bytes = gerar_pdf(df_pdf, totais, anotacao)
 
         st.download_button(
             "📥 Baixar Relatório PDF",
