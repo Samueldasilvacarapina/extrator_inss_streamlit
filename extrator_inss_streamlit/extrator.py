@@ -1,7 +1,7 @@
+
 import pdfplumber
 import re
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
+from datetime import datetime
 import pytesseract
 from pdf2image import convert_from_path
 
@@ -28,7 +28,7 @@ def extrair_nome_banco(linha):
     return match.group(2).strip() if match else "BANCO"
 
 def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
+    match = re.search(r'(CONTRIB\.?[^\s]*)\s+R\$', linha, re.IGNORECASE)
     return match.group(1).strip() if match else "SINDICATO"
 
 def extrair_linhas(texto):
@@ -65,36 +65,8 @@ def processar_linhas(linhas):
 
     return dados
 
-def preencher_meses_faltantes(dados):
-    # Filtra apenas as datas com valor real (maior que 0)
-    dados_reais = [d for d in dados if d["Valor"] > 0]
-    if not dados_reais:
-        return dados  # Nenhum dado real, nada a preencher
-
-    # Determina o intervalo entre a menor e maior data com valor real
-    datas_convertidas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados_reais]
-    data_inicial = min(datas_convertidas)
-    data_final = max(datas_convertidas)
-
-    # Cria conjunto das datas existentes
-    datas_existentes = set(d["Data"] for d in dados)
-
-    atual = data_inicial
-    while atual <= data_final:
-        data_str = atual.strftime("%d/%m/%Y")
-        if data_str not in datas_existentes:
-            dados.append({
-                "Data": data_str,
-                "Tipo": "SEM DADOS",
-                "Valor": 0.0
-            })
-        atual += relativedelta(months=1)
-
-    return dados
-
 def processar_pdf(caminho_pdf):
     dados = []
-
     try:
         with pdfplumber.open(caminho_pdf) as pdf:
             for pagina in pdf.pages:
@@ -115,8 +87,8 @@ def processar_pdf(caminho_pdf):
         except Exception:
             pass
 
+    # Apenas dados com valor numérico
     dados = [d for d in dados if d.get("Valor") is not None]
-    dados = preencher_meses_faltantes(dados)
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
-
     return dados
+
