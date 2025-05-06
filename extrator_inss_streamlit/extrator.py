@@ -1,153 +1,125 @@
-import pdfplumber
-import re
-from datetime import datetime, timedelta
-from dateutil.relativedelta import relativedelta
-import pytesseract
-from pdf2image import convert_from_path
-from collections import defaultdict
+import streamlit as st
+import pandas as pd
+from extrator import processar_pdf
+from fpdf import FPDF
+from io import BytesIO
+import tempfile
+import os
 
-rubricas_alvo = {
-    "RMC": "217",
-    "RCC": "268",
-}
+st.set_page_config(page_title="Extrator INSS", layout="wide")
+st.title("📄 Extrator de Histórico de Créditos - INSS")
+st.markdown("Envie o PDF e veja os valores reais por competência, mês a mês.")
 
-rubricas_textuais = {
-    "SINDICATO": [
-        "CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"
-    ]
-}
+uploaded_file = st.file_uploader("Envie o arquivo PDF do histórico de créditos", type="pdf")
 
-def formatar_valor(valor_str):
-    return float(valor_str.replace(".", "").replace(",", "."))
+def gerar_pdf(df, resumo, anotacao):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=10)
 
-def extrair_competencia(linha):
-    match = re.search(r'(\d{2})/(\d{4})', linha)
-    return f"01/{match.group(1)}/{match.group(2)}" if match else None
+    pdf.set_font("Arial", 'B', size=12)
+    pdf.cell(200, 10, "Extrato de Créditos INSS", ln=True, align="C")
+    pdf.ln(10)
 
-def extrair_nome_banco(linha):
-    match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
-    return match.group(2).strip() if match else "BANCO"
+    # Tabela
+    pdf.set_font("Arial", 'B', size=10)
+    pdf.cell(40, 8, "Data", border=1)
+    pdf.cell(90, 8, "Tipo", border=1)
+    pdf.cell(40, 8, "Valor", border=1, ln=True)
+    pdf.set_font("Arial", size=10)
+    for _, row in df.iterrows():
+        pdf.cell(40, 8, row["Data"], border=1)
+        pdf.cell(90, 8, row["Tipo"][:40], border=1)
+        pdf.cell(40, 8, row["Valor Formatado"], border=1, ln=True)
 
-def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
-    return match.group(1).strip() if match else "SINDICATO"
+    # Resumo
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', size=12)
+    pdf.cell(200, 10, "Totais por Tipo", ln=True)
 
-def extrair_linhas(texto):
-    return texto.split("\n")
+    for tipo, total in resumo.items():
+        if "SEM DADOS" in tipo:
+            continue
+        pdf.set_font("Arial", size=10)
+        pdf.cell(0, 8, f"Total {tipo}: R$ {total:,.2f}", ln=True)
+        pdf.cell(0, 8, f"Em Dobro: R$ {total * 2:,.2f}", ln=True)
+        pdf.cell(0, 8, f"Com Indenização: R$ {total * 2 + 10000:,.2f}", ln=True)
+        pdf.ln(2)
 
-def obter_valor_liquido_bloco(linhas):
-    for linha in linhas:
-        match = re.search(r'VALOR\s+L[ÍI]QUIDO.*?R\$\s*([\d.,]+)', linha.upper())
-        if match:
-            return formatar_valor(match.group(1))
-    return None
+    # Valor da causa
+    valor_total = sum(valor for tipo, valor in resumo.items() if "SEM DADOS" not in tipo)
+    pdf.set_font("Arial", 'B', size=11)
+    pdf.cell(0, 10, f"VALOR DA CAUSA (total x2 + R$10.000): R$ {valor_total * 2 + 10000:,.2f}", ln=True)
+    pdf.ln(5)
 
-def processar_linhas(linhas):
-    dados = []
-    competencia = None
-    valor_liquido = obter_valor_liquido_bloco(linhas)
+    # Anotação
+    pdf.set_font("Arial", 'B', size=11)
+    pdf.cell(0, 10, "Anotações:", ln=True)
+    pdf.set_font("Arial", size=10)
+    for linha in anotacao.split("\n"):
+        pdf.multi_cell(0, 8, linha)
 
-    for linha in linhas:
-        if "CRÉDITO" in linha.upper() or "CRED" in linha.upper():
-            continue  # Ignora lançamentos de crédito
+    # Salva em memória
+    pdf_bytes = pdf.output(dest='S').encode('latin1')
+    return BytesIO(pdf_bytes)
 
-        nova_comp = extrair_competencia(linha)
-        if nova_comp:
-            competencia = nova_comp
+if uploaded_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        caminho = tmp_file.name
 
-        for tipo, codigo in rubricas_alvo.items():
-            if re.search(rf'\b{codigo}\b', linha):
-                valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor_match and competencia:
-                    valor = formatar_valor(valor_match.group(1))
-                    dados.append({
-                        "Data": competencia,
-                        "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
-                        "Valor": valor,
-                        "Liquido": valor_liquido
-                    })
-
-        for tipo, termos in rubricas_textuais.items():
-            if any(p in linha.upper() for p in termos):
-                valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor_match and competencia:
-                    valor = formatar_valor(valor_match.group(1))
-                    dados.append({
-                        "Data": competencia,
-                        "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
-                        "Valor": valor,
-                        "Liquido": valor_liquido
-                    })
-
-    return dados
-
-def preencher_meses_faltantes(dados):
-    dados_reais = [d for d in dados if d["Valor"] > 0]
-    if not dados_reais:
-        return dados
-
-    datas_convertidas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados_reais]
-    data_inicial = min(datas_convertidas)
-    data_final = max(datas_convertidas)
-
-    datas_existentes = set(d["Data"] for d in dados)
-
-    atual = data_inicial
-    while atual <= data_final:
-        data_str = atual.strftime("%d/%m/%Y")
-        if data_str not in datas_existentes:
-            dados.append({
-                "Data": data_str,
-                "Tipo": "SEM DADOS",
-                "Valor": 0.0
-            })
-        atual += relativedelta(months=1)
-
-    return dados
-
-def filtrar_apenas_descontos_reais(dados):
-    soma_por_mes = defaultdict(float)
-    liquido_por_mes = {}
-
-    for d in dados:
-        soma_por_mes[d["Data"]] += d["Valor"]
-        if d["Liquido"] is not None:
-            liquido_por_mes[d["Data"]] = d["Liquido"]
-
-    # Só manter meses onde a soma dos descontos é menor que o valor líquido (ou seja, desconto real)
-    meses_validos = {
-        data for data in soma_por_mes
-        if data in liquido_por_mes and soma_por_mes[data] < liquido_por_mes[data]
-    }
-
-    return [d for d in dados if d["Data"] in meses_validos]
-
-def processar_pdf(caminho_pdf):
-    dados = []
-
-    try:
-        with pdfplumber.open(caminho_pdf) as pdf:
-            for pagina in pdf.pages:
-                texto = pagina.extract_text()
-                if texto:
-                    linhas = extrair_linhas(texto)
-                    dados.extend(processar_linhas(linhas))
-    except Exception:
-        pass
+    with st.spinner("Processando PDF..."):
+        dados = processar_pdf(caminho)
 
     if not dados:
-        try:
-            imagens = convert_from_path(caminho_pdf)
-            for imagem in imagens:
-                texto = pytesseract.image_to_string(imagem, lang='por')
-                linhas = extrair_linhas(texto)
-                dados.extend(processar_linhas(linhas))
-        except Exception:
-            pass
+        st.warning("O conteúdo do PDF parece estar em formato de imagem (escaneado). Use um PDF com texto real para extração correta.")
+        st.error("Não foi possível extrair dados do PDF.")
+    else:
+        df = pd.DataFrame(dados)
+        df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
+        df = df.dropna(subset=["Data"]).drop_duplicates()
+        df["Data"] = df["Data"].dt.strftime("%m/%Y")
+        df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
+        df = df[["Data", "Tipo", "Valor Formatado"]]
 
-    dados = [d for d in dados if d.get("Valor") is not None]
-    dados = filtrar_apenas_descontos_reais(dados)  # << FILTRO AQUI
-    dados = preencher_meses_faltantes(dados)
-    dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+        st.success("✅ Dados extraídos com sucesso!")
 
-    return dados
+        # Oculta linhas com data 01/2015 na exibição
+        df_exibicao = df[df["Data"] != "01/2015"]
+        st.dataframe(df_exibicao, use_container_width=True)
+
+        # Totais
+        df_raw = pd.DataFrame(dados)
+        totais = df_raw.groupby("Tipo")["Valor"].sum()
+        st.subheader("Totais por Tipo")
+
+        for tipo, total in totais.items():
+            if "SEM DADOS" in tipo:
+                continue
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric(f"Total {tipo}", f"R$ {total:,.2f}")
+            with col2:
+                st.metric("Em Dobro", f"R$ {total * 2:,.2f}")
+            with col3:
+                st.metric("Com Indenização", f"R$ {total * 2 + 10000:,.2f}")
+
+        valor_total = sum(valor for tipo, valor in totais.items() if "SEM DADOS" not in tipo)
+        st.divider()
+        st.metric("VALOR DA CAUSA (total x2 + R$10.000)", f"R$ {valor_total * 2 + 10000:,.2f}")
+
+        # ✍️ Anotações e botão para gerar PDF
+        anotacao = st.text_area("Anotações Finais", height=150)
+
+        # Oculta linhas com data 01/2015 no PDF
+        df_filtrado = df[df["Data"] != "01/2015"]
+        pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
+
+        st.download_button(
+            "📥 Baixar Relatório PDF",
+            data=pdf_bytes.getvalue(),
+            file_name="relatorio_inss.pdf",
+            mime="application/pdf"
+        )
+
+        os.remove(caminho)
