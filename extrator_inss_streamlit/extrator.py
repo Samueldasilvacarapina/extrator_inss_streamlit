@@ -34,6 +34,7 @@ def extrair_nome_sindicato(linha):
 def extrair_linhas(texto):
     return texto.split("\n")
 
+# 🔧 Função atualizada para evitar falsos positivos nas rubricas
 def processar_linhas(linhas):
     dados = []
     competencia = None
@@ -44,11 +45,12 @@ def processar_linhas(linhas):
             competencia = nova_comp
 
         for tipo, codigo in rubricas_alvo.items():
-            if codigo in linha:
+            # Verifica se o código está isolado (não embutido em outro número)
+            if re.search(rf'\b{codigo}\b', linha):
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor_match:
+                if valor_match and competencia:
                     dados.append({
-                        "Data": competencia or "01/01/1900",
+                        "Data": competencia,
                         "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
                         "Valor": formatar_valor(valor_match.group(1))
                     })
@@ -56,9 +58,9 @@ def processar_linhas(linhas):
         for tipo, termos in rubricas_textuais.items():
             if any(p in linha.upper() for p in termos):
                 valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor_match:
+                if valor_match and competencia:
                     dados.append({
-                        "Data": competencia or "01/01/1900",
+                        "Data": competencia,
                         "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
                         "Valor": formatar_valor(valor_match.group(1))
                     })
@@ -66,17 +68,14 @@ def processar_linhas(linhas):
     return dados
 
 def preencher_meses_faltantes(dados):
-    # Filtra apenas as datas com valor real (maior que 0)
     dados_reais = [d for d in dados if d["Valor"] > 0]
     if not dados_reais:
-        return dados  # Nenhum dado real, nada a preencher
+        return dados
 
-    # Determina o intervalo entre a menor e maior data com valor real
     datas_convertidas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados_reais]
     data_inicial = min(datas_convertidas)
     data_final = max(datas_convertidas)
 
-    # Cria conjunto das datas existentes
     datas_existentes = set(d["Data"] for d in dados)
 
     atual = data_inicial
