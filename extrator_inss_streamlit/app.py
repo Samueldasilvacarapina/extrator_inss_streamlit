@@ -1,6 +1,7 @@
+
 import streamlit as st
 import pandas as pd
-from extrator import processar_pdf
+from extrator_refatorado import processar_pdf
 from fpdf import FPDF
 from io import BytesIO
 import tempfile
@@ -74,12 +75,6 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["DataRaw"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
         df = df.dropna(subset=["DataRaw"]).drop_duplicates()
-
-        # Filtra apenas entre a menor e maior data com VALOR > 0
-        datas_validas = df[df["Valor"] > 0]["DataRaw"]
-        data_ini, data_fim = datas_validas.min(), datas_validas.max()
-        df = df[(df["DataRaw"] >= data_ini) & (df["DataRaw"] <= data_fim)]
-
         df["Data"] = df["DataRaw"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
         df = df[["Data", "Tipo", "Valor", "Valor Formatado"]]
