@@ -85,8 +85,8 @@ if uploaded_file:
 
         st.success("✅ Dados extraídos com sucesso!")
 
-        # Exibição sem 2015
-        df_exibicao = df[df["Ano"] != 2015][["Data Formatada", "Tipo", "Valor Formatado"]]
+        # Exibe todos os anos, inclusive 2015
+        df_exibicao = df[["Data Formatada", "Tipo", "Valor Formatado"]]
         st.dataframe(df_exibicao, use_container_width=True)
 
         # Totais com todos os dados
@@ -111,8 +111,8 @@ if uploaded_file:
         # ✍️ Anotações e botão para gerar PDF
         anotacao = st.text_area("Anotações Finais", height=150)
 
-        # PDF sem dados de 2015
-        df_pdf = df[df["Ano"] != 2015][["Data Formatada", "Tipo", "Valor Formatado"]]
+        # PDF com todos os dados, inclusive 2015
+        df_pdf = df[["Data Formatada", "Tipo", "Valor Formatado"]]
         df_pdf = df_pdf.rename(columns={"Data Formatada": "Data"})
         pdf_bytes = gerar_pdf(df_pdf, totais, anotacao)
 
@@ -124,4 +124,3 @@ if uploaded_file:
         )
 
         os.remove(caminho)
-
