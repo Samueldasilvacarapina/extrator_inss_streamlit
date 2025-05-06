@@ -78,24 +78,21 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
         df = df.dropna(subset=["Data"]).drop_duplicates()
-        df = df[df["Data"].dt.year != 2015]  # ❌ remove ano de 2015
-        df["Data"] = df["Data"].dt.strftime("%m/%Y")
+        df["Data Formatada"] = df["Data"].dt.strftime("%m/%Y")
+        df["Ano"] = df["Data"].dt.year
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df = df[["Data", "Tipo", "Valor Formatado"]]
+        df = df[["Data", "Data Formatada", "Ano", "Tipo", "Valor", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
 
-        # Exibe tabela sem 2015
-        st.dataframe(df, use_container_width=True)
+        # Exibição sem 2015
+        df_exibicao = df[df["Ano"] != 2015][["Data Formatada", "Tipo", "Valor Formatado"]]
+        st.dataframe(df_exibicao, use_container_width=True)
 
-        # Totais
-        df_raw = pd.DataFrame(dados)
-        df_raw["Data"] = pd.to_datetime(df_raw["Data"], format="%d/%m/%Y", errors="coerce")
-        df_raw = df_raw.dropna(subset=["Data"])
-        df_raw = df_raw[df_raw["Data"].dt.year != 2015]  # ❌ remove ano de 2015
-        totais = df_raw.groupby("Tipo")["Valor"].sum()
-
+        # Totais com todos os dados
+        totais = df.groupby("Tipo")["Valor"].sum()
         st.subheader("Totais por Tipo")
+
         for tipo, total in totais.items():
             if "SEM DADOS" in tipo:
                 continue
@@ -114,9 +111,10 @@ if uploaded_file:
         # ✍️ Anotações e botão para gerar PDF
         anotacao = st.text_area("Anotações Finais", height=150)
 
-        # Gera PDF sem dados de 2015
-        df_filtrado = df[~df["Data"].str.endswith("/2015")]
-        pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
+        # PDF sem dados de 2015
+        df_pdf = df[df["Ano"] != 2015][["Data Formatada", "Tipo", "Valor Formatado"]]
+        df_pdf = df_pdf.rename(columns={"Data Formatada": "Data"})
+        pdf_bytes = gerar_pdf(df_pdf, totais, anotacao)
 
         st.download_button(
             "📥 Baixar Relatório PDF",
@@ -126,3 +124,4 @@ if uploaded_file:
         )
 
         os.remove(caminho)
+
