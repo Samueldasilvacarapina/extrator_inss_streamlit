@@ -1,15 +1,17 @@
 import pdfplumber
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pytesseract
 from pdf2image import convert_from_path
 
+# Rubricas numéricas (RMC e RCC)
 rubricas_alvo = {
     "RMC": "217",
     "RCC": "268",
 }
 
+# Rubricas textuais (Sindicato)
 rubricas_textuais = {
     "SINDICATO": [
         "CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"
@@ -66,23 +68,30 @@ def processar_linhas(linhas):
     return dados
 
 def preencher_meses_faltantes(dados):
-    # Filtra apenas as datas com valor real (maior que 0)
-    dados_reais = [d for d in dados if d["Valor"] > 0]
-    if not dados_reais:
-        return dados  # Nenhum dado real, nada a preencher
+    if not dados:
+        return dados
 
-    # Determina o intervalo entre a menor e maior data com valor real
+    # Evita repetições exatas (mesmo mês e mesmo tipo)
+    vistos = set()
+    dados = [d for d in dados if (d["Data"], d["Tipo"]) not in vistos and not vistos.add((d["Data"], d["Tipo"]))]
+
+    # Pega apenas os dados com valor real (não SEM DADOS nem zero)
+    dados_reais = [d for d in dados if d["Valor"] > 0 and "SEM DADOS" not in d["Tipo"]]
+    if not dados_reais:
+        return dados
+
     datas_convertidas = [datetime.strptime(d["Data"], "%d/%m/%Y") for d in dados_reais]
     data_inicial = min(datas_convertidas)
     data_final = max(datas_convertidas)
 
-    # Cria conjunto das datas existentes
-    datas_existentes = set(d["Data"] for d in dados)
+    # Garante que cada mês do intervalo apareça pelo menos uma vez
+    meses_existentes = set(datetime.strptime(d["Data"], "%d/%m/%Y").strftime("%m/%Y") for d in dados)
 
     atual = data_inicial
     while atual <= data_final:
+        mes_ano = atual.strftime("%m/%Y")
         data_str = atual.strftime("%d/%m/%Y")
-        if data_str not in datas_existentes:
+        if mes_ano not in meses_existentes:
             dados.append({
                 "Data": data_str,
                 "Tipo": "SEM DADOS",
