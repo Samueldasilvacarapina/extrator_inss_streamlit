@@ -37,34 +37,45 @@ def extrair_linhas(texto):
 def processar_linhas(linhas):
     dados = []
     competencia = None
+    dentro_competencia = False
 
     for linha in linhas:
-        if "CRÉDITO" in linha.upper() or "CRED" in linha.upper():
+        linha_limpa = linha.strip()
+
+        if "CRÉDITO" in linha_limpa.upper() or "CRED" in linha_limpa.upper():
             continue  # Ignora lançamentos de crédito
 
-        nova_comp = extrair_competencia(linha)
+        nova_comp = extrair_competencia(linha_limpa)
         if nova_comp:
             competencia = nova_comp
+            dentro_competencia = True
+            continue  # pula para a próxima linha após atualizar competência
 
-        for tipo, codigo in rubricas_alvo.items():
-            if re.search(rf'\b{codigo}\b', linha):
-                valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor_match and competencia:
-                    dados.append({
-                        "Data": competencia,
-                        "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
-                        "Valor": formatar_valor(valor_match.group(1))
-                    })
+        # Só processa rubricas se estiver dentro de uma competência válida
+        if competencia and dentro_competencia:
+            # Verifica rubricas RMC/RCC por código específico
+            for tipo, codigo in rubricas_alvo.items():
+                if re.search(rf'\b{codigo}\b', linha_limpa):
+                    valor_match = re.search(r'R\$\s*([\d.,]+)', linha_limpa)
+                    if valor_match:
+                        dados.append({
+                            "Data": competencia,
+                            "Tipo": f"{tipo} - {extrair_nome_banco(linha_limpa)}",
+                            "Valor": formatar_valor(valor_match.group(1))
+                        })
+                        break  # evita múltiplas detecções na mesma linha
 
-        for tipo, termos in rubricas_textuais.items():
-            if any(p in linha.upper() for p in termos):
-                valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
-                if valor_match and competencia:
-                    dados.append({
-                        "Data": competencia,
-                        "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
-                        "Valor": formatar_valor(valor_match.group(1))
-                    })
+            # Verifica contribuições sindicais por palavras-chave
+            for tipo, termos in rubricas_textuais.items():
+                if any(p in linha_limpa.upper() for p in termos):
+                    valor_match = re.search(r'R\$\s*([\d.,]+)', linha_limpa)
+                    if valor_match:
+                        dados.append({
+                            "Data": competencia,
+                            "Tipo": f"{tipo} - {extrair_nome_sindicato(linha_limpa)}",
+                            "Valor": formatar_valor(valor_match.group(1))
+                        })
+                        break
 
     return dados
 
