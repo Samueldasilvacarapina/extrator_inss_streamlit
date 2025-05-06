@@ -1,7 +1,7 @@
 
 import streamlit as st
 import pandas as pd
-from extrato import processar_pdf
+from extrator import processar_pdf
 from fpdf import FPDF
 from io import BytesIO
 import tempfile
