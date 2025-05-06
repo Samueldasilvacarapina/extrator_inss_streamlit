@@ -87,10 +87,8 @@ def processar_pdf(caminho_pdf):
         except Exception:
             pass
 
-    # Remover dados com valor nulo ou zero
-    dados = [d for d in dados if d.get("Valor") is not None and d["Valor"] > 0]
-
-    # Ordenar por data
+    # Mantém apenas valores com valor definido
+    dados = [d for d in dados if d.get("Valor") is not None]
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
 
     return dados
