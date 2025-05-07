@@ -18,7 +18,7 @@ rubricas_textuais = {
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia(linha):
+def extrair_competencia_por_linha(linha):
     match = re.search(r'(\d{2})/(\d{4})', linha)
     return f"01/{match.group(1)}/{match.group(2)}" if match else None
 
@@ -35,15 +35,13 @@ def extrair_linhas(texto):
 
 def processar_linhas(linhas):
     dados = []
-    competencia = None
 
     for linha in linhas:
-        if not competencia:
-            competencia = extrair_competencia(linha)
+        competencia = extrair_competencia_por_linha(linha)
 
         for tipo, codigo in rubricas_alvo.items():
             if codigo in linha:
-                valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
+                valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
                 if valor_match:
                     dados.append({
                         "Data": competencia or "01/01/1900",
@@ -53,7 +51,7 @@ def processar_linhas(linhas):
 
         for tipo, termos in rubricas_textuais.items():
             if any(p in linha.upper() for p in termos):
-                valor_match = re.search(r'R\$\s*([\d.,]+)', linha)
+                valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
                 if valor_match:
                     dados.append({
                         "Data": competencia or "01/01/1900",
@@ -76,11 +74,12 @@ def processar_pdf(caminho_pdf):
     except Exception:
         pass
 
+    # Fallback para OCR se pdfplumber não funcionar
     if not dados:
         try:
             imagens = convert_from_path(caminho_pdf)
             for imagem in imagens:
-                texto = pytesseract.image_to_string(imagem, lang='por')
+                texto = pytesseract.image_to_string(imagem)
                 linhas = extrair_linhas(texto)
                 dados.extend(processar_linhas(linhas))
         except Exception:
