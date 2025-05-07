@@ -78,19 +78,19 @@ if uploaded_file:
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
         df = df.dropna(subset=["Data"]).drop_duplicates()
-        df["Data Formatada"] = df["Data"].dt.strftime("%m/%Y")
-        df["Ano"] = df["Data"].dt.year
+        df["Data"] = df["Data"].dt.strftime("%m/%Y")
         df["Valor Formatado"] = df["Valor"].map(lambda x: f"R$ {x:,.2f}")
-        df = df[["Data", "Data Formatada", "Ano", "Tipo", "Valor", "Valor Formatado"]]
+        df = df[["Data", "Tipo", "Valor Formatado"]]
 
         st.success("✅ Dados extraídos com sucesso!")
 
-        # Exibe todos os anos, inclusive 2015
-        df_exibicao = df[["Data Formatada", "Tipo", "Valor Formatado"]]
+        # Oculta linhas com data 01/2015 na exibição
+        df_exibicao = df[df["Data"] != "01/2015"]
         st.dataframe(df_exibicao, use_container_width=True)
 
-        # Totais com todos os dados
-        totais = df.groupby("Tipo")["Valor"].sum()
+        # Totais
+        df_raw = pd.DataFrame(dados)
+        totais = df_raw.groupby("Tipo")["Valor"].sum()
         st.subheader("Totais por Tipo")
 
         for tipo, total in totais.items():
@@ -111,10 +111,9 @@ if uploaded_file:
         # ✍️ Anotações e botão para gerar PDF
         anotacao = st.text_area("Anotações Finais", height=150)
 
-        # PDF com todos os dados, inclusive 2015
-        df_pdf = df[["Data Formatada", "Tipo", "Valor Formatado"]]
-        df_pdf = df_pdf.rename(columns={"Data Formatada": "Data"})
-        pdf_bytes = gerar_pdf(df_pdf, totais, anotacao)
+        # Oculta linhas com data 01/2015 no PDF
+        df_filtrado = df[df["Data"] != "01/2015"]
+        pdf_bytes = gerar_pdf(df_filtrado, totais, anotacao)
 
         st.download_button(
             "📥 Baixar Relatório PDF",
