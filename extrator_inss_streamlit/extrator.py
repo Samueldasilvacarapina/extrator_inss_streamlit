@@ -22,7 +22,7 @@ def extrair_competencia_periodo(linhas):
     for linha in linhas:
         match = re.search(r'(\d{2})/(\d{4})\s*a\s*(\d{2})/(\d{4})', linha)
         if match:
-            return f"01/{match.group(1)}/{match.group(2)}"
+            return f"01/{match.group(2)}/{match.group(1)}"  # Corrigido: ano/mês
     return None
 
 def extrair_nome_banco(linha):
@@ -87,5 +87,10 @@ def processar_pdf(caminho_pdf):
             pass
 
     dados = [d for d in dados if d.get("Valor") is not None]
-    dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+    
+    try:
+        dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+    except Exception as e:
+        print("Erro ao ordenar datas:", e)
+
     return dados
