@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 import pytesseract
 from pdf2image import convert_from_path
+import pandas as pd
 
 rubricas_alvo = {
     "RMC": "217",
@@ -10,7 +11,7 @@ rubricas_alvo = {
 }
 
 rubricas_textuais = {
-    "SINDICATO": [
+    "Contribuição": [
         "CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"
     ]
 }
@@ -22,16 +23,8 @@ def extrair_competencia_periodo(linhas):
     for linha in linhas:
         match = re.search(r'(\d{2})/(\d{4})\s*a\s*(\d{2})/(\d{4})', linha)
         if match:
-            return f"01/{match.group(2)}/{match.group(1)}"  # Corrigido: ano/mês
+            return f"{match.group(1)}/{match.group(2)}"
     return None
-
-def extrair_nome_banco(linha):
-    match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
-    return match.group(2).strip() if match else "BANCO"
-
-def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
-    return match.group(1).strip() if match else "SINDICATO"
 
 def extrair_linhas(texto):
     return texto.split("\n")
@@ -47,7 +40,7 @@ def processar_linhas(linhas):
                 if valor_match and competencia:
                     dados.append({
                         "Data": competencia,
-                        "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
+                        "Tipo": tipo,
                         "Valor": formatar_valor(valor_match.group(1))
                     })
 
@@ -57,14 +50,14 @@ def processar_linhas(linhas):
                 if valor_match and competencia:
                     dados.append({
                         "Data": competencia,
-                        "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
+                        "Tipo": tipo,
                         "Valor": formatar_valor(valor_match.group(1))
                     })
 
     return dados
 
 def processar_pdf(caminho_pdf):
-    dados = []
+    dados_extraidos = []
 
     try:
         with pdfplumber.open(caminho_pdf) as pdf:
@@ -72,25 +65,33 @@ def processar_pdf(caminho_pdf):
                 texto = pagina.extract_text()
                 if texto:
                     linhas = extrair_linhas(texto)
-                    dados.extend(processar_linhas(linhas))
+                    dados_extraidos.extend(processar_linhas(linhas))
     except Exception:
         pass
 
-    if not dados:
+    if not dados_extraidos:
         try:
             imagens = convert_from_path(caminho_pdf)
             for imagem in imagens:
                 texto = pytesseract.image_to_string(imagem, lang='por')
                 linhas = extrair_linhas(texto)
-                dados.extend(processar_linhas(linhas))
+                dados_extraidos.extend(processar_linhas(linhas))
         except Exception:
             pass
 
-    dados = [d for d in dados if d.get("Valor") is not None]
-    
-    try:
-        dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
-    except Exception as e:
-        print("Erro ao ordenar datas:", e)
+    # Organizar os dados em colunas: Data | RMC | RCC | Contribuição
+    df = pd.DataFrame(dados_extraidos)
+    tabela_pivotada = df.pivot_table(
+        index="Data",
+        columns="Tipo",
+        values="Valor",
+        aggfunc="sum",
+        fill_value=0
+    ).reset_index()
 
-    return dados
+    # Ordena as datas corretamente no formato mês/ano
+    tabela_pivotada["Data"] = pd.to_datetime(tabela_pivotada["Data"], format="%m/%Y")
+    tabela_pivotada = tabela_pivotada.sort_values("Data")
+    tabela_pivotada["Data"] = tabela_pivotada["Data"].dt.strftime("%m/%Y")
+
+    return tabela_pivotada
