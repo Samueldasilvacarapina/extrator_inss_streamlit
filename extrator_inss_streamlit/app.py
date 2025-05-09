@@ -75,6 +75,10 @@ if uploaded_file:
         st.warning("O conteúdo do PDF parece estar em formato de imagem (escaneado). Use um PDF com texto real para extração correta.")
         st.error("Não foi possível extrair dados do PDF.")
     else:
+        # ✅ Mostra dados brutos extraídos para depuração
+        st.write("🔍 **Dados brutos extraídos (primeiros 5 registros):**")
+        st.json(dados[:5])
+
         df = pd.DataFrame(dados)
         df["Data"] = pd.to_datetime(df["Data"], format="%d/%m/%Y", errors="coerce")
         df = df.dropna(subset=["Data"]).drop_duplicates()
