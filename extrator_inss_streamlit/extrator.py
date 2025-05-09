@@ -13,10 +13,6 @@ rubricas_textuais = {
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia_por_linha(linha):
-    match = re.search(r'(\d{2})/(\d{4})', linha)
-    return f"01/{match.group(1)}/{match.group(2)}" if match else None
-
 def extrair_linhas(texto):
     return texto.split("\n")
 
@@ -29,10 +25,15 @@ def processar_linhas(linhas):
     competencia_atual = None
 
     for linha in linhas:
-        nova_comp = re.match(r'^\s*(\d{2}/\d{4})\s*$', linha.strip())
-        if nova_comp:
-            competencia_atual = f"01/{nova_comp.group(1)}"
-            continue
+        linha = linha.strip()
+
+        # Detecta a nova competência se estiver na linha correta
+        if linha.startswith("Competência Período"):
+            continue  # pula essa linha, a próxima deve ter a competência
+
+        match_comp = re.match(r'^(\d{2}/\d{4})\s+R\$[\d,.]+', linha)
+        if match_comp:
+            competencia_atual = f"01/{match_comp.group(1)}"
 
         for tipo, palavras in rubricas_textuais.items():
             if any(p in linha.upper() for p in palavras):
@@ -49,7 +50,7 @@ def processar_linhas(linhas):
                         "Tipo": nome_final,
                         "Valor": formatar_valor(valor_match.group(1))
                     })
-                break  # já classificou
+                break
 
     return dados
 
@@ -80,4 +81,3 @@ def processar_pdf(caminho_pdf):
     dados = [d for d in dados if d.get("Valor") is not None]
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
     return dados
-
