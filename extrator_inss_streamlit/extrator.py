@@ -7,13 +7,6 @@ from pdf2image import convert_from_path
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia(linhas):
-    for linha in linhas:
-        match = re.search(r'(\d{2})/(\d{4})', linha)
-        if match:
-            return f"01/{match.group(1)}/{match.group(2)}"
-    return "01/01/1900"
-
 def extrair_linhas(texto):
     return texto.split("\n")
 
@@ -30,8 +23,8 @@ def identificar_tipo_e_nome(linha):
         return ("RMC", "EMPRÉSTIMO SOBRE A RMC", valor)
 
     # RCC
-    if "RCC" in linha_upper or "CARTAO" in linha_upper:
-        return ("RCC", "CONSIGNACAO - CARTAO", valor)
+    if "RCC" in linha_upper or "CARTAO" in linha_upper or "CONSIGNACAO - CARTAO" in linha_upper:
+        return ("RCC", "CARTÃO", valor)
 
     # Sindicato/Contribuição
     if any(p in linha_upper for p in ["CONTRIB", "SINDIC", "SIND." , "SINDICATO"]):
@@ -39,24 +32,34 @@ def identificar_tipo_e_nome(linha):
         nome = nome_match.group(1).strip().title() if nome_match else "SINDICATO"
         return ("SINDICATO", nome, valor)
 
-    # Empréstimo bancário genérico
+    # Empréstimo bancário
     if "CONSIGNACAO EMPRESTIMO BANCARIO" in linha_upper:
         return ("BANCO", "EMPRÉSTIMO BANCÁRIO", valor)
 
     # Fallback
     return ("SEM DADOS", "SEM DADOS", valor)
 
-def processar_linhas(linhas, competencia_padrao):
+def processar_linhas_por_competencia(linhas):
     dados = []
+    competencia_atual = None
+
     for linha in linhas:
+        # Detecta nova competência
+        comp_match = re.match(r'^\s*(\d{2}/\d{4})\s+', linha)
+        if comp_match:
+            competencia_atual = f"01/{comp_match.group(1)}"
+            continue
+
+        # Tenta classificar linha
         resultado = identificar_tipo_e_nome(linha)
-        if resultado:
+        if resultado and competencia_atual:
             tipo_base, tipo_nome, valor = resultado
             dados.append({
-                "Data": competencia_padrao,
+                "Data": competencia_atual,
                 "Tipo": f"{tipo_base} - {tipo_nome}",
                 "Valor": valor
             })
+
     return dados
 
 def processar_pdf(caminho_pdf):
@@ -67,8 +70,7 @@ def processar_pdf(caminho_pdf):
                 texto = pagina.extract_text()
                 if texto:
                     linhas = extrair_linhas(texto)
-                    competencia = extrair_competencia(linhas)
-                    dados.extend(processar_linhas(linhas, competencia))
+                    dados.extend(processar_linhas_por_competencia(linhas))
     except Exception:
         pass
 
@@ -79,8 +81,7 @@ def processar_pdf(caminho_pdf):
             for imagem in imagens:
                 texto = pytesseract.image_to_string(imagem)
                 linhas = extrair_linhas(texto)
-                competencia = extrair_competencia(linhas)
-                dados.extend(processar_linhas(linhas, competencia))
+                dados.extend(processar_linhas_por_competencia(linhas))
         except Exception:
             pass
 
