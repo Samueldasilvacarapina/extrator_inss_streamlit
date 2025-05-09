@@ -4,84 +4,83 @@ from datetime import datetime
 import pytesseract
 from pdf2image import convert_from_path
 
-rubricas_alvo = {
-    "RMC": "217",
-    "RCC": "268",
-}
-
-rubricas_textuais = {
-    "SINDICATO": [
-        "CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"
-    ]
-}
-
 def formatar_valor(valor_str):
     return float(valor_str.replace(".", "").replace(",", "."))
 
-def extrair_competencia_por_linha(linha):
-    match = re.search(r'(\d{2})/(\d{4})', linha)
-    return f"01/{match.group(1)}/{match.group(2)}" if match else None
-
-def extrair_nome_banco(linha):
-    match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
-    return match.group(2).strip() if match else "BANCO"
-
-def extrair_nome_sindicato(linha):
-    match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
-    return match.group(1).strip() if match else "SINDICATO"
+def extrair_competencia(linhas):
+    for linha in linhas:
+        match = re.search(r'(\d{2})/(\d{4})', linha)
+        if match:
+            return f"01/{match.group(1)}/{match.group(2)}"
+    return "01/01/1900"
 
 def extrair_linhas(texto):
     return texto.split("\n")
 
-def processar_linhas(linhas):
+def identificar_tipo_e_nome(linha):
+    linha_upper = linha.upper()
+    valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
+    if not valor_match:
+        return None
+
+    valor = formatar_valor(valor_match.group(1))
+
+    # RMC
+    if "RMC" in linha_upper or "EMPRESTIMO SOBRE A RMC" in linha_upper:
+        return ("RMC", "EMPRÉSTIMO SOBRE A RMC", valor)
+
+    # RCC
+    if "RCC" in linha_upper or "CARTAO" in linha_upper:
+        return ("RCC", "CONSIGNACAO - CARTAO", valor)
+
+    # Sindicato/Contribuição
+    if any(p in linha_upper for p in ["CONTRIB", "SINDIC", "SIND." , "SINDICATO"]):
+        nome_match = re.search(r'(CONTRIBUI.*?|SINDIC.*?|SIND\.?.*?)\s+R\$', linha_upper)
+        nome = nome_match.group(1).strip().title() if nome_match else "SINDICATO"
+        return ("SINDICATO", nome, valor)
+
+    # Empréstimo bancário genérico
+    if "CONSIGNACAO EMPRESTIMO BANCARIO" in linha_upper:
+        return ("BANCO", "EMPRÉSTIMO BANCÁRIO", valor)
+
+    # Fallback
+    return ("SEM DADOS", "SEM DADOS", valor)
+
+def processar_linhas(linhas, competencia_padrao):
     dados = []
-
     for linha in linhas:
-        competencia = extrair_competencia_por_linha(linha)
-
-        for tipo, codigo in rubricas_alvo.items():
-            if codigo in linha:
-                valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
-                if valor_match:
-                    dados.append({
-                        "Data": competencia or "01/01/1900",
-                        "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
-                        "Valor": formatar_valor(valor_match.group(1))
-                    })
-
-        for tipo, termos in rubricas_textuais.items():
-            if any(p in linha.upper() for p in termos):
-                valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
-                if valor_match:
-                    dados.append({
-                        "Data": competencia or "01/01/1900",
-                        "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
-                        "Valor": formatar_valor(valor_match.group(1))
-                    })
-
+        resultado = identificar_tipo_e_nome(linha)
+        if resultado:
+            tipo_base, tipo_nome, valor = resultado
+            dados.append({
+                "Data": competencia_padrao,
+                "Tipo": f"{tipo_base} - {tipo_nome}",
+                "Valor": valor
+            })
     return dados
 
 def processar_pdf(caminho_pdf):
     dados = []
-
     try:
         with pdfplumber.open(caminho_pdf) as pdf:
             for pagina in pdf.pages:
                 texto = pagina.extract_text()
                 if texto:
                     linhas = extrair_linhas(texto)
-                    dados.extend(processar_linhas(linhas))
+                    competencia = extrair_competencia(linhas)
+                    dados.extend(processar_linhas(linhas, competencia))
     except Exception:
         pass
 
-    # Fallback para OCR se pdfplumber não funcionar
+    # Fallback OCR
     if not dados:
         try:
             imagens = convert_from_path(caminho_pdf)
             for imagem in imagens:
                 texto = pytesseract.image_to_string(imagem)
                 linhas = extrair_linhas(texto)
-                dados.extend(processar_linhas(linhas))
+                competencia = extrair_competencia(linhas)
+                dados.extend(processar_linhas(linhas, competencia))
         except Exception:
             pass
 
