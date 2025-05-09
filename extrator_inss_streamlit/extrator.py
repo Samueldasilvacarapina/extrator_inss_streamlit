@@ -4,15 +4,10 @@ from datetime import datetime
 import pytesseract
 from pdf2image import convert_from_path
 
-rubricas_alvo = {
-    "RMC": "217",
-    "RCC": "268",
-}
-
 rubricas_textuais = {
-    "SINDICATO": [
-        "CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"
-    ]
+    "RMC": ["RMC", "EMPRÉSTIMO SOBRE A RMC"],
+    "RCC": ["CONSIGNACAO - CARTAO", "CARTAO"],
+    "SINDICATO": ["CONTRIB", "CONTRIBUIÇÃO", "CONTRIB.SINDICAL", "SINDICATO", "SIND.", "SINDICAL"],
 }
 
 def formatar_valor(valor_str):
@@ -22,42 +17,39 @@ def extrair_competencia_por_linha(linha):
     match = re.search(r'(\d{2})/(\d{4})', linha)
     return f"01/{match.group(1)}/{match.group(2)}" if match else None
 
-def extrair_nome_banco(linha):
-    match = re.search(r'(RMC|RCC).*?- ([A-Z0-9 ./]+)', linha)
-    return match.group(2).strip() if match else "BANCO"
+def extrair_linhas(texto):
+    return texto.split("\n")
 
 def extrair_nome_sindicato(linha):
     match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
     return match.group(1).strip() if match else "SINDICATO"
 
-def extrair_linhas(texto):
-    return texto.split("\n")
-
 def processar_linhas(linhas):
     dados = []
+    competencia_atual = None
 
     for linha in linhas:
-        competencia = extrair_competencia_por_linha(linha)
+        nova_comp = re.match(r'^\s*(\d{2}/\d{4})\s*$', linha.strip())
+        if nova_comp:
+            competencia_atual = f"01/{nova_comp.group(1)}"
+            continue
 
-        for tipo, codigo in rubricas_alvo.items():
-            if codigo in linha:
+        for tipo, palavras in rubricas_textuais.items():
+            if any(p in linha.upper() for p in palavras):
                 valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
                 if valor_match:
-                    dados.append({
-                        "Data": competencia or "01/01/1900",
-                        "Tipo": f"{tipo} - {extrair_nome_banco(linha)}",
-                        "Valor": formatar_valor(valor_match.group(1))
-                    })
+                    if tipo == "SINDICATO":
+                        nome = extrair_nome_sindicato(linha)
+                        nome_final = f"{tipo} - {nome}"
+                    else:
+                        nome_final = f"{tipo} - BANCO"
 
-        for tipo, termos in rubricas_textuais.items():
-            if any(p in linha.upper() for p in termos):
-                valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
-                if valor_match:
                     dados.append({
-                        "Data": competencia or "01/01/1900",
-                        "Tipo": f"{tipo} - {extrair_nome_sindicato(linha)}",
+                        "Data": competencia_atual or "01/01/1900",
+                        "Tipo": nome_final,
                         "Valor": formatar_valor(valor_match.group(1))
                     })
+                break  # já classificou
 
     return dados
 
@@ -74,7 +66,7 @@ def processar_pdf(caminho_pdf):
     except Exception:
         pass
 
-    # Fallback para OCR se pdfplumber não funcionar
+    # OCR fallback
     if not dados:
         try:
             imagens = convert_from_path(caminho_pdf)
@@ -88,3 +80,4 @@ def processar_pdf(caminho_pdf):
     dados = [d for d in dados if d.get("Valor") is not None]
     dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
     return dados
+
