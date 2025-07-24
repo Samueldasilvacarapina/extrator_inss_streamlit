@@ -20,19 +20,47 @@ def extrair_nome_sindicato(linha):
     match = re.search(r'(CONTRIB\.?.*?)\s+R\$', linha, re.IGNORECASE)
     return match.group(1).strip() if match else "SINDICATO"
 
+def extrair_competencia(texto):
+    # 1. MM/AAAA
+    match = re.search(r"\b(\d{2}/\d{4})\b", texto)
+    if match:
+        return f"01/{match.group(1)}"
+
+    # 2. MM-AAAA
+    match = re.search(r"\b(\d{2})-(\d{4})\b", texto)
+    if match:
+        return f"01/{match.group(1)}/{match.group(2)}"
+
+    # 3. DD/MM/AAAA (pega mês e ano)
+    match = re.search(r"\b(\d{2})/(\d{2})/(\d{4})\b", texto)
+    if match:
+        return f"01/{match.group(2)}/{match.group(3)}"
+
+    # 4. Mês por extenso ou abreviado + ano (ex: JAN/2023)
+    meses = {
+        "JAN": "01", "FEV": "02", "MAR": "03", "ABR": "04",
+        "MAI": "05", "JUN": "06", "JUL": "07", "AGO": "08",
+        "SET": "09", "OUT": "10", "NOV": "11", "DEZ": "12"
+    }
+    match = re.search(r"\b(" + "|".join(meses.keys()) + r")[^\d]{0,2}(\d{4})\b", texto.upper())
+    if match:
+        mes = meses[match.group(1)]
+        ano = match.group(2)
+        return f"01/{mes}/{ano}"
+
+    return None
+
 def processar_linhas(linhas):
     dados = []
     competencia_atual = None
 
     for i, linha in enumerate(linhas):
         linha = linha.strip()
+        nova_comp = extrair_competencia(linha)
+        if nova_comp:
+            competencia_atual = nova_comp
 
-        # ✅ Agora detecta qualquer competência MM/AAAA mesmo dentro de frases como "01/2021 a 31/01/2021"
-        comp_match = re.search(r"\b(\d{2}/\d{4})\b", linha)
-        if comp_match:
-            competencia_atual = f"01/{comp_match.group(1)}"  # sempre adiciona dia 01
-
-        # ✅ Detecta rubrica e valor na linha
+        # Detecta rubrica e valor
         for tipo, palavras in rubricas_textuais.items():
             if any(p in linha.upper() for p in palavras):
                 valor_match = re.search(r'R\$ ?([\d.,]+)', linha)
@@ -44,11 +72,12 @@ def processar_linhas(linhas):
                         nome_final = f"{tipo} - BANCO"
 
                     dados.append({
-                        "Data": competencia_atual or "01/01/1900",  # se não achou, marca default
+                        "Data": competencia_atual if competencia_atual else "SEM DATA",
                         "Tipo": nome_final,
-                        "Valor": formatar_valor(valor_match.group(1))
+                        "Valor": formatar_valor(valor_match.group(1)),
+                        "Origem": linha  # opcional para depuração
                     })
-                break  # já achou rubrica, não precisa checar as outras
+                break  # achou rubrica, não precisa continuar
 
     return dados
 
@@ -56,7 +85,7 @@ def processar_pdf(caminho_pdf):
     dados = []
 
     try:
-        # ✅ Primeiro tenta extrair como texto
+        # Tenta extrair com texto
         with pdfplumber.open(caminho_pdf) as pdf:
             for pagina in pdf.pages:
                 texto = pagina.extract_text()
@@ -66,7 +95,7 @@ def processar_pdf(caminho_pdf):
     except Exception as e:
         print("Erro ao ler com pdfplumber:", e)
 
-    # ✅ Se não achou nada (PDF escaneado), usa OCR
+    # Se não achou nada, tenta OCR
     if not dados:
         try:
             imagens = convert_from_path(caminho_pdf)
@@ -77,10 +106,13 @@ def processar_pdf(caminho_pdf):
         except Exception as e:
             print("Erro ao ler com OCR:", e)
 
-    # ✅ Filtra só os dados válidos
+    # Filtra apenas os que têm valor
     dados = [d for d in dados if d.get("Valor") is not None]
 
-    # ✅ Ordena por data
-    dados.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+    # Ordena por data (ignora os com 'SEM DATA')
+    dados_validos = [d for d in dados if d["Data"] != "SEM DATA"]
+    dados_invalidos = [d for d in dados if d["Data"] == "SEM DATA"]
 
-    return dados
+    dados_validos.sort(key=lambda x: datetime.strptime(x["Data"], "%d/%m/%Y"))
+
+    return dados_validos + dados_invalidos
